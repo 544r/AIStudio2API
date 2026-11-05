@@ -117,6 +117,7 @@ const sections: {
     fields: [
       'admin_auth_enabled',
       'admin_username',
+      'account_push_token',
       'request_body_log',
       'log_file',
       'log_max_total_mb',
@@ -286,6 +287,14 @@ watch(apiKeyList, () => {
 function resetForm(config: ServiceConfig): void {
   Object.assign(form, JSON.parse(JSON.stringify(config)) as ServiceConfig)
   adminPassword.value = ''
+  if (typeof form.account_push_token !== 'string') form.account_push_token = ''
+}
+
+// generatePushToken 用浏览器加密随机数生成 32 字节十六进制推送令牌
+function generatePushToken(): void {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  form.account_push_token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 watch(
@@ -1038,6 +1047,32 @@ async function saveConfig(): Promise<void> {
                 />
               </SettingRow>
             </template>
+            <SettingRow
+              :label="t('settings.pushToken')"
+              control-id="setting-push-token"
+              :description="t('settings.pushTokenHelp')"
+              effect="immediate"
+              :changed="changedFields.has('account_push_token')"
+              :env="environmentKey('account_push_token')"
+            >
+              <div class="flex items-center gap-2">
+                <input
+                  id="setting-push-token"
+                  v-model.trim="form.account_push_token"
+                  name="account_push_token"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :class="inputClass"
+                />
+                <button
+                  type="button"
+                  class="shrink-0 rounded-md border border-line bg-raised px-2.5 py-1 text-xs text-gray-300 transition hover:bg-line"
+                  @click="generatePushToken"
+                >
+                  {{ t('settings.pushTokenGenerate') }}
+                </button>
+              </div>
+            </SettingRow>
             <SettingRow
               :label="t('settings.requestBodyLog')"
               control-id="setting-body-log"

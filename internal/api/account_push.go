@@ -44,7 +44,7 @@ type accountPushRequest struct {
 // 该接口只为脚本设计，凭 ACCOUNT_PUSH_TOKEN 鉴权；未配置令牌时保持关闭。
 func (s *server) handleAccountPushCookies(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if strings.TrimSpace(s.config.AccountPushToken) == "" {
+	if strings.TrimSpace(s.currentPushToken()) == "" {
 		writeAdminError(w, http.StatusForbidden, "push_disabled", "Set ACCOUNT_PUSH_TOKEN to enable cookie push")
 		return
 	}
@@ -90,7 +90,7 @@ func (s *server) handleAccountPushCookies(w http.ResponseWriter, r *http.Request
 // pushAuthorized 校验推送令牌：优先读 X-Push-Token，也认 Authorization Bearer。
 // 不接受查询参数，避免令牌出现在代理与访问日志里。
 func (s *server) pushAuthorized(r *http.Request) bool {
-	expected := strings.TrimSpace(s.config.AccountPushToken)
+	expected := strings.TrimSpace(s.currentPushToken())
 	if expected == "" {
 		return false
 	}
@@ -105,6 +105,20 @@ func (s *server) pushAuthorized(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// setPushToken 更新推送接口当前使用的令牌，管理端保存配置后立即生效
+func (s *server) setPushToken(token string) {
+	s.pushToken.Store(&token)
+}
+
+// currentPushToken 返回推送接口当前使用的令牌
+func (s *server) currentPushToken() string {
+	token := s.pushToken.Load()
+	if token == nil {
+		return ""
+	}
+	return *token
 }
 
 // pushCookieText 把 cookies 字段转成 ParseCookieText 接受的文本；字符串形式原样使用

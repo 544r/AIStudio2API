@@ -257,6 +257,7 @@ type RuntimeConfig struct {
 	AdminPassword             *string              `json:"admin_password,omitempty"`
 	AdminPasswordSet          bool                 `json:"admin_password_set"`
 	SavedAdminPassword        string               `json:"-"`
+	AccountPushToken          *string              `json:"account_push_token,omitempty"`
 	BuildNativeNonstream      bool                 `json:"build_native_nonstream"`
 	NonstreamKeepalive        bool                 `json:"nonstream_keepalive"`
 	FakeStream                bool                 `json:"fake_stream"`
@@ -503,6 +504,9 @@ func (s *server) handleUpdateRuntimeConfig(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		writeAdminUpstreamError(w, err)
 		return
+	}
+	if updated.AccountPushToken != nil {
+		s.setPushToken(*updated.AccountPushToken)
 	}
 	writeJSON(w, http.StatusOK, updated)
 }

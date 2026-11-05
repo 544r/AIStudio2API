@@ -858,6 +858,11 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 	if value.AdminPassword != nil {
 		password = *value.AdminPassword
 	}
+	// 推送令牌由设置页提交时替换，未提交时沿用已保存的值
+	pushToken := saved.AccountPushToken
+	if value.AccountPushToken != nil {
+		pushToken = strings.TrimSpace(*value.AccountPushToken)
+	}
 	initTimeout, err := time.ParseDuration(value.InitTimeout)
 	if err != nil {
 		return api.RuntimeConfig{}, invalidConfigError(fmt.Errorf("INIT_TIMEOUT 无效: %w", err))
@@ -871,6 +876,7 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 		RequestBodyLog: value.RequestBodyLog,
 		LogFile:        value.LogFile, LogMaxTotalMB: value.LogMaxTotalMB,
 		AdminAuthEnabled: value.AdminAuthEnabled, AdminUsername: strings.TrimSpace(value.AdminUsername), AdminPassword: password,
+		AccountPushToken: pushToken,
 		BuildNativeNonstream: value.BuildNativeNonstream,
 		NonstreamKeepalive:   value.NonstreamKeepalive, FakeStream: value.FakeStream, YouTubeLinks: value.YouTubeLinks,
 		SearchModelAliases: value.SearchModelAliases, GoogleSearch: value.GoogleSearch, StripThoughtSignatures: value.StripThoughtSignatures,
@@ -888,8 +894,6 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 		WAABackend:             value.WAABackend,
 		MediaOutput:            strings.ToLower(strings.TrimSpace(value.MediaOutput)),
 		MediaBaseURL:           strings.TrimSpace(value.MediaBaseURL),
-		// 推送令牌不在管理页表单里，保存其它配置时必须沿用已保存的值
-		AccountPushToken: saved.AccountPushToken,
 	}.KeepEnvironment(saved)
 	if err := cfg.Validate(); err != nil {
 		return api.RuntimeConfig{}, invalidConfigError(err)
@@ -1165,12 +1169,14 @@ func buildVersion() string {
 }
 
 func runtimeConfigDTO(cfg config.Config) api.RuntimeConfig {
+	pushToken := cfg.AccountPushToken
 	return api.RuntimeConfig{
 		AutoStart:      cfg.AutoStart,
 		RequestBodyLog: cfg.RequestBodyLog,
 		LogFile:        cfg.LogFile, LogMaxTotalMB: cfg.LogMaxTotalMB,
 		AdminAuthEnabled: cfg.AdminAuthEnabled, AdminUsername: cfg.AdminUsername,
 		AdminPasswordSet: cfg.AdminPassword != "", SavedAdminPassword: cfg.AdminPassword,
+		AccountPushToken: &pushToken,
 		BuildNativeNonstream: cfg.BuildNativeNonstream,
 		NonstreamKeepalive:   cfg.NonstreamKeepalive, FakeStream: cfg.FakeStream, YouTubeLinks: cfg.YouTubeLinks,
 		SearchModelAliases: cfg.SearchModelAliases, GoogleSearch: cfg.GoogleSearch, StripThoughtSignatures: cfg.StripThoughtSignatures,

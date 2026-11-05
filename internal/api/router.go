@@ -59,6 +59,8 @@ type server struct {
 	pairing           *pairingTokens
 	loginViews        *loginViews
 	accountTasks      *accountTasks
+	// pushToken 是推送接口当前使用的令牌，管理端保存配置后立即更新
+	pushToken atomic.Pointer[string]
 	// background 按响应 ID 保存进行中的 Responses 后台响应
 	background sync.Map
 }
@@ -71,6 +73,7 @@ func NewHandler(service aistudio.Service, config Config) http.Handler {
 		service: service, config: config, responseStates: newResponseStateStore(config.States), uploads: newGeminiUploads(), caches: newGeminiCaches(),
 		thoughtSignatures: newThoughtSignatureStore(), pairing: &pairingTokens{}, loginViews: &loginViews{}, accountTasks: &accountTasks{},
 	}
+	s.setPushToken(config.AccountPushToken)
 	public := http.NewServeMux()
 	public.HandleFunc("GET /v1/models", s.handleOpenAIModels)
 	public.HandleFunc("GET /v1/models/{model...}", s.handleOpenAIModel)

@@ -330,6 +330,7 @@ export interface ServiceConfig {
   admin_username: string
   admin_password?: string
   admin_password_set: boolean
+  account_push_token?: string
   build_native_nonstream: boolean
   nonstream_keepalive: boolean
   fake_stream: boolean
