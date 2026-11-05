@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         AIStudio2API Cookie Pusher
 // @namespace    aistudio2api-push
-// @version      1.0.0
+// @version      1.1.0
 // @description  定时把 AI Studio 页面的最新 Cookie 罐推送到自建 AIStudio2API 服务，按 u/N 序号自动导入或刷新账户，替代手动粘贴
 // @author       aistudio2api
 // @match        https://aistudio.google.com/*
 // @match        https://accounts.google.com/*
 // @run-at       document-idle
 // @noframes
+// @updateURL    https://raw.githubusercontent.com/544r/AIStudio2API/main/userscripts/aistudio2api-cookie-push.user.js
+// @downloadURL  https://raw.githubusercontent.com/544r/AIStudio2API/main/userscripts/aistudio2api-cookie-push.user.js
 // @grant        unsafeWindow
 // @grant        GM_cookie
 // @grant        GM_xmlhttpRequest
@@ -15,6 +17,7 @@
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
+// @grant        GM_openInTab
 // @connect      *
 // ==/UserScript==
 
@@ -39,6 +42,9 @@
  *    优先用于识别账号（多登录顺序变化后绑定可能过期），识别不到邮箱时才用绑定。
  * 9. 脚本只在 aistudio.google.com 页面推送；accounts.google.com 的 Cookie
  *    （LSID / __Host-*PLSID / __Host-GAPS）靠 @match 才读得到，别删。
+ * 10. 在线更新：@updateURL 指向 GitHub 上的脚本源码，篡改猴会按自己的周期
+ *     检查更新；菜单「🔄 检查更新」可立即比对版本并打开安装页。
+ *     发现新版本时菜单会多出「⬆ 更新到 vX」。
  *
  * 说明：
  * - 推送的是完整 Google 会话 Cookie 罐（含 SID / SAPISID / __Secure-*），
@@ -95,7 +101,10 @@
     const STORE_REFRESH_MIN = "a2a_refresh_min";
     const STORE_LAST_REFRESH = "a2a_last_refresh";
 
-    const SCRIPT_VERSION = "1.0.0";
+    const SCRIPT_VERSION = "1.1.0";
+    const UPDATE_URL =
+        "https://raw.githubusercontent.com/544r/AIStudio2API/main/userscripts/aistudio2api-cookie-push.user.js";
+    const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
     // ==================== 配置 ====================
 
@@ -250,6 +259,7 @@
         GM_registerMenuCommand("⏱ 设置推送间隔", saveInterval);
         GM_registerMenuCommand("👤 设置允许推送的账号", saveAllowedEmails);
         GM_registerMenuCommand("🔄 设置自动刷新间隔", saveRefreshInterval);
+        GM_registerMenuCommand("🔄 检查更新", () => checkUpdate(true));
         GM_registerMenuCommand("ℹ 查看状态", () => {
             const lines = [
                 `脚本版本: ${SCRIPT_VERSION}`,
@@ -257,6 +267,7 @@
                 `推送密钥: ${cfg.token ? "已配置" : "未配置"}`,
                 `推送间隔: ${cfg.intervalMin} 分钟`,
                 `自动刷新: ${cfg.refreshMin ? cfg.refreshMin + " 分钟" : "关闭"}`,
+                `自动更新: 每 24 小时检查`,
                 `账号限制: ${cfg.allowedEmails.join(", ") || "不限"}`,
                 `当前页面: u/${accountPathPrefix()}`,
                 `识别邮箱: ${detectEmail() || "未识别"}`,
@@ -267,6 +278,99 @@
             alert(lines.join("\n"));
         });
         refreshAudioMenuLabel();
+    }
+
+    // ==================== 在线更新 ====================
+
+    let updateMenuId = null;
+
+    function gmGetText(url) {
+        return new Promise((resolve, reject) => {
+            try {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url,
+                    timeout: 30000,
+                    onload: (response) =>
+                        response.status === 200
+                            ? resolve(response.responseText)
+                            : reject(new Error(`HTTP ${response.status}`)),
+                    onerror: () => reject(new Error("网络错误")),
+                    ontimeout: () => reject(new Error("请求超时")),
+                });
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    function parseUserscriptVersion(text) {
+        const match = String(text).match(/\/\/\s*@version\s+([^\s]+)/);
+        return match ? match[1] : "";
+    }
+
+    function compareVersions(left, right) {
+        const a = String(left).split(".").map((part) => parseInt(part, 10) || 0);
+        const b = String(right).split(".").map((part) => parseInt(part, 10) || 0);
+        const length = Math.max(a.length, b.length);
+        for (let index = 0; index < length; index++) {
+            const x = a[index] || 0;
+            const y = b[index] || 0;
+            if (x !== y) return x > y ? 1 : -1;
+        }
+        return 0;
+    }
+
+    function openInstallPage() {
+        try {
+            if (typeof GM_openInTab === "function") {
+                GM_openInTab(UPDATE_URL, { active: true, insert: true });
+                return;
+            }
+        } catch (_) {}
+        window.open(UPDATE_URL, "_blank", "noopener");
+    }
+
+    // refreshUpdateMenu 在发现新版本时加一个「更新到 vX」菜单，没有更新时移除
+    function refreshUpdateMenu(version) {
+        if (updateMenuId !== null) {
+            try {
+                GM_unregisterMenuCommand(updateMenuId);
+            } catch (_) {}
+            updateMenuId = null;
+        }
+        if (!version) return;
+        updateMenuId = GM_registerMenuCommand(`⬆ 更新到 v${version}`, openInstallPage);
+    }
+
+    async function checkUpdate(manual) {
+        if (state.checkingUpdate) return;
+        state.checkingUpdate = true;
+        try {
+            const text = await gmGetText(UPDATE_URL);
+            const remote = parseUserscriptVersion(text);
+            if (!remote) throw new Error("脚本里没有 @version");
+            const comparison = compareVersions(remote, SCRIPT_VERSION);
+            if (comparison > 0) {
+                log(`发现新版本 v${remote}（当前 v${SCRIPT_VERSION}）`);
+                refreshUpdateMenu(remote);
+                if (
+                    manual &&
+                    confirm(`发现新版本 v${remote}，当前 v${SCRIPT_VERSION}。现在更新？`)
+                ) {
+                    openInstallPage();
+                }
+            } else {
+                refreshUpdateMenu("");
+                if (manual) alert(`已是最新版本 v${SCRIPT_VERSION}`);
+            }
+        } catch (error) {
+            const message = (error && error.message) || String(error);
+            log(`⚠ 检查更新失败: ${message}`);
+            if (manual) alert(`检查更新失败：${message}`);
+        } finally {
+            state.checkingUpdate = false;
+        }
     }
 
     // ==================== 账户与绑定 ====================
@@ -280,6 +384,8 @@
         badgeText: "",
         timer: null,
         refreshTimer: null,
+        updateTimer: null,
+        checkingUpdate: false,
     };
 
     let badgeEl = null;
@@ -894,6 +1000,12 @@
         }
 
         restartTimers();
+        // 页面加载后延迟检查一次更新，之后每 24 小时检查；篡改猴自身也会按
+        // @updateURL 的周期检查，二选一先发现新版本即可
+        setTimeout(() => checkUpdate(false), 30000);
+        state.updateTimer = createWorkerTimer(UPDATE_CHECK_INTERVAL_MS, () =>
+            checkUpdate(false)
+        );
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState !== "visible") return;
             const intervalMs = cfg.intervalMin * 60 * 1000;
