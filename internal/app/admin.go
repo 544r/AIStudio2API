@@ -888,6 +888,8 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 		WAABackend:             value.WAABackend,
 		MediaOutput:            strings.ToLower(strings.TrimSpace(value.MediaOutput)),
 		MediaBaseURL:           strings.TrimSpace(value.MediaBaseURL),
+		// 推送令牌不在管理页表单里，保存其它配置时必须沿用已保存的值
+		AccountPushToken: saved.AccountPushToken,
 	}.KeepEnvironment(saved)
 	if err := cfg.Validate(); err != nil {
 		return api.RuntimeConfig{}, invalidConfigError(err)

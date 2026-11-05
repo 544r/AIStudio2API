@@ -55,6 +55,7 @@ var configKeys = [...]string{
 	"ADMIN_AUTH_ENABLED",
 	"ADMIN_USERNAME",
 	"ADMIN_PASSWORD",
+	"ACCOUNT_PUSH_TOKEN",
 	"BUILD_NATIVE_NONSTREAM",
 	"NONSTREAM_KEEPALIVE",
 	"FAKE_STREAM",
@@ -107,6 +108,7 @@ type Config struct {
 	AdminAuthEnabled       bool
 	AdminUsername          string
 	AdminPassword          string
+	AccountPushToken       string
 	BuildNativeNonstream   bool
 	NonstreamKeepalive     bool
 	FakeStream             bool
@@ -192,7 +194,7 @@ type InvalidValue struct {
 }
 
 // secretKeys 是取值可能含凭据的配置键，无效时不记录原值
-var secretKeys = []string{"PROXY", "PROXY_API_KEY", "API_KEY_ACCOUNTS", "ADMIN_PASSWORD"}
+var secretKeys = []string{"PROXY", "PROXY_API_KEY", "API_KEY_ACCOUNTS", "ADMIN_PASSWORD", "ACCOUNT_PUSH_TOKEN"}
 
 // invalidValue 返回无效配置项的记录，凭据键不带原值
 func invalidValue(key, value string, err error) InvalidValue {
@@ -225,6 +227,7 @@ var configSetters = map[string]func(*Config, string) error{
 	"REQUEST_TIMEOUT":          durationSetter("REQUEST_TIMEOUT", func(c *Config) *time.Duration { return &c.RequestTimeout }),
 	"ADMIN_USERNAME":           textSetter(func(c *Config) *string { return &c.AdminUsername }, strings.TrimSpace),
 	"ADMIN_PASSWORD":           textSetter(func(c *Config) *string { return &c.AdminPassword }, func(value string) string { return value }),
+	"ACCOUNT_PUSH_TOKEN":       textSetter(func(c *Config) *string { return &c.AccountPushToken }, strings.TrimSpace),
 	"FIRST_EVENT_HEDGE":        textSetter(func(c *Config) *string { return &c.FirstEventHedge }, lowerTrim),
 	"FIRST_EVENT_HEDGE_MODELS": textSetter(func(c *Config) *string { return &c.FirstEventHedgeModels }, strings.TrimSpace),
 	"CONTINUATION_PROMPT":      textSetter(func(c *Config) *string { return &c.ContinuationPrompt }, strings.TrimSpace),
@@ -520,6 +523,7 @@ func (c Config) envValues() map[string]string {
 		"ADMIN_AUTH_ENABLED":       strconv.FormatBool(c.AdminAuthEnabled),
 		"ADMIN_USERNAME":           c.AdminUsername,
 		"ADMIN_PASSWORD":           c.AdminPassword,
+		"ACCOUNT_PUSH_TOKEN":       c.AccountPushToken,
 		"BUILD_NATIVE_NONSTREAM":   strconv.FormatBool(c.BuildNativeNonstream),
 		"NONSTREAM_KEEPALIVE":      strconv.FormatBool(c.NonstreamKeepalive),
 		"FAKE_STREAM":              strconv.FormatBool(c.FakeStream),

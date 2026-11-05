@@ -242,6 +242,7 @@ func runServer(ctx context.Context, cfg config.Config, manager *runtimeManager, 
 	apiHandler := api.NewHandler(manager, api.Config{
 		APIKey: cfg.ProxyAPIKey, Admin: manager, Ledger: manager.ledger, Prompts: manager.prompts, Updates: updater,
 		AdminAuthEnabled: cfg.AdminAuthEnabled, AdminUsername: cfg.AdminUsername, AdminPassword: cfg.AdminPassword,
+		AccountPushToken: cfg.AccountPushToken,
 		AdminSessionPath: filepath.Join("runtime", "admin-sessions.json"),
 		MediaDir:         filepath.Join("runtime", "media"), MediaLinks: manager.mediaLinks,
 		ResponseModes: manager.responseModes, WaitLaunch: manager.WaitLaunch,

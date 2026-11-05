@@ -34,6 +34,7 @@ type generationAdmin interface {
 	DiscoverCookieAccounts(context.Context, api.CookieImportInput) ([]api.CookieBrowser, error)
 	ImportChromeAccounts(context.Context, api.ChromeImportInput) ([]api.AdminAccount, error)
 	ImportAccountState(context.Context, api.AccountStateInput) (api.AdminAccount, error)
+	PushAccountCookies(context.Context, api.AccountPushInput) (api.AccountPushResult, error)
 	RenewAccountCookies(ctx context.Context, accountID string, token string, cookies []aistudio.StateCookie) (api.AdminAccount, error)
 	UpdateAccount(context.Context, string, api.AccountInput) (api.AdminAccount, error)
 	DeleteAccount(context.Context, string) error
@@ -482,6 +483,13 @@ func (manager *runtimeManager) ImportAccountState(ctx context.Context, input api
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
 	return manager.current.admin.ImportAccountState(ctx, input)
+}
+
+// PushAccountCookies 在当前生成服务导入或刷新用户脚本推送的账户 Cookie
+func (manager *runtimeManager) PushAccountCookies(ctx context.Context, input api.AccountPushInput) (api.AccountPushResult, error) {
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	return manager.current.admin.PushAccountCookies(ctx, input)
 }
 
 // RenewAccountCookies 在当前生成服务以配对续签凭据替换账户的会话 Cookie

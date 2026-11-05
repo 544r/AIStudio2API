@@ -601,6 +601,7 @@ cp .env.example .env
 | `ADMIN_AUTH_ENABLED` | `false` | 管理控制台账号密码登录开关 |
 | `ADMIN_USERNAME` | `admin` | 管理员账号 |
 | `ADMIN_PASSWORD` | 空 | 管理员密码，开启登录时必填 |
+| `ACCOUNT_PUSH_TOKEN` | 空 | 用户脚本推送 Cookie 的令牌，见 `userscripts/README.md`；留空时 `POST /api/accounts/push-cookies` 关闭 |
 | `PROXY` | 空 | Chrome 导入、登录和账户默认使用的 HTTP、HTTPS 或 SOCKS5 代理，多个代理用逗号分隔组成代理池；留空时使用系统代理 |
 | `INIT_TIMEOUT` | `2m` | 单账户 WAA 初始化超时 |
 | `REQUEST_TIMEOUT` | `30m` | 单次请求最大执行时间，自动续写的每一轮开始时重新计时 |

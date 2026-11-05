@@ -18,6 +18,8 @@ type Config struct {
 	AdminAuthEnabled bool
 	AdminUsername    string
 	AdminPassword    string
+	// AccountPushToken 是用户脚本推送 Cookie 的令牌，为空时推送接口关闭
+	AccountPushToken string
 	// AdminSessionPath 是记住我的管理会话文件
 	AdminSessionPath string
 	Ledger           RequestLedger
@@ -145,6 +147,8 @@ func NewHandler(service aistudio.Service, config Config) http.Handler {
 	}
 	root.HandleFunc("POST /api/pairing/accounts", s.handlePairingAccount)
 	root.HandleFunc("PUT /api/pairing/accounts/{account}/cookies", s.handlePairingRenewal)
+	// 用户脚本推送 Cookie：凭独立令牌鉴权，不受管理会话与同源限制
+	root.HandleFunc("POST /api/accounts/push-cookies", s.handleAccountPushCookies)
 	return root
 }
 

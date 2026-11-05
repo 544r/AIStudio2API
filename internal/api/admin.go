@@ -21,6 +21,7 @@ type AdminService interface {
 	DiscoverCookieAccounts(context.Context, CookieImportInput) ([]CookieBrowser, error)
 	ImportChromeAccounts(context.Context, ChromeImportInput) ([]AdminAccount, error)
 	ImportAccountState(context.Context, AccountStateInput) (AdminAccount, error)
+	PushAccountCookies(context.Context, AccountPushInput) (AccountPushResult, error)
 	RenewAccountCookies(ctx context.Context, accountID string, token string, cookies []aistudio.StateCookie) (AdminAccount, error)
 	UpdateAccount(context.Context, string, AccountInput) (AdminAccount, error)
 	DeleteAccount(context.Context, string) error
