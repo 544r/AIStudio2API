@@ -25,6 +25,7 @@ import (
 	"github.com/Mag1cFall/AIStudio2API/internal/setup"
 	"github.com/Mag1cFall/AIStudio2API/internal/statedb"
 	"github.com/Mag1cFall/AIStudio2API/internal/webui"
+	"github.com/Mag1cFall/AIStudio2API/userscripts"
 	"github.com/klauspost/compress/gzhttp"
 )
 
@@ -353,6 +354,7 @@ func rootHandler(apiHandler http.Handler) http.Handler {
 	root.Handle("/v1beta/", apiHandler)
 	root.Handle("/upload/", apiHandler)
 	root.Handle("/media/", apiHandler)
+	root.Handle("GET /userscript.user.js", userscripts.Handler())
 	root.Handle("/", webui.Handler())
 	return securityHeaders(root)
 }

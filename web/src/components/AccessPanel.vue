@@ -588,6 +588,29 @@ function methodClass(method: string): string {
                 </li>
               </ul>
             </article>
+
+            <article class="mt-4 rounded-lg border border-line bg-panel p-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="min-w-60 flex-1">
+                  <h4 class="text-sm font-semibold text-gray-200">
+                    {{ t('access.userscript') }}
+                  </h4>
+                  <p class="mt-1 text-xs text-gray-500">
+                    {{ t('access.userscriptHelp') }}
+                  </p>
+                </div>
+                <a
+                  class="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+                  :href="`${origin}/userscript.user.js`"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <UiIcon name="download" :size="14" />
+                  {{ t('access.userscriptInstall') }}
+                </a>
+              </div>
+              <p class="mt-2 text-xs text-gray-500">{{ t('access.userscriptPermission') }}</p>
+            </article>
           </template>
 
           <template v-else-if="section === 'clients'">
