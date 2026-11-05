@@ -505,6 +505,9 @@
                 email: detectedEmail || undefined,
                 account_id: getBoundAccountId() || undefined,
                 source: "userscript",
+                // 多账号浏览器共用一份登录罐：让服务端顺手把全部 u/N 子号都登记上。
+                // 设置了白名单时关闭，避免把用户明确排除的主号也带上去。
+                discover_all: cfg.allowedEmails.length === 0,
             };
             const headers = {
                 "Content-Type": "application/json",
@@ -533,7 +536,11 @@
                 const text =
                     `✅ 已推送（${validText}）` +
                     (data.created ? "，新建账户" : "，刷新账户") +
+                    (data.discovered_accounts > 0
+                        ? `，自动登记 ${data.discovered_accounts} 个子号`
+                        : "") +
                     ` · ${account.label || account.id}`;
+                if (data.discovery_error) log(`⚠ 子号识别失败: ${data.discovery_error}`);
                 log(text);
                 state.lastPushAt = Date.now();
                 state.lastPushText = new Date().toLocaleString("zh-CN", { hour12: false });

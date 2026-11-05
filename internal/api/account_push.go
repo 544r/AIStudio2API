@@ -20,6 +20,8 @@ type AccountPushInput struct {
 	Email        string                `json:"email,omitempty"`
 	AccountID    string                `json:"account_id,omitempty"`
 	Source       string                `json:"source,omitempty"`
+	// DiscoverAll 表示按同一份登录罐识别并登记全部 u/N 子号
+	DiscoverAll bool `json:"discover_all"`
 }
 
 // AccountPushResult 是一次推送的结果：账户为推送后的摘要，SessionValid 只在本次推送
@@ -28,16 +30,21 @@ type AccountPushResult struct {
 	Account      AdminAccount `json:"account"`
 	Created      bool         `json:"created"`
 	SessionValid *bool        `json:"session_valid,omitempty"`
+	// Discovered 是本次推送顺带登记的子号数量
+	Discovered int `json:"discovered_accounts,omitempty"`
+	// DiscoveryError 是识别子号失败的原因，主账号推送成功时仍返回 200
+	DiscoveryError string `json:"discovery_error,omitempty"`
 }
 
 // accountPushRequest 是推送接口的请求体，cookies 接受 Cookie-Editor 风格的 JSON 数组
 // 或一段 Cookie 请求头文本，auth_user 接受数字或字符串形式的 0-9。
 type accountPushRequest struct {
-	Cookies   json.RawMessage `json:"cookies"`
-	AuthUser  json.RawMessage `json:"auth_user"`
-	Email     string          `json:"email"`
-	AccountID string          `json:"account_id"`
-	Source    string          `json:"source"`
+	Cookies     json.RawMessage `json:"cookies"`
+	AuthUser    json.RawMessage `json:"auth_user"`
+	Email       string          `json:"email"`
+	AccountID   string          `json:"account_id"`
+	Source      string          `json:"source"`
+	DiscoverAll *bool           `json:"discover_all"`
 }
 
 // handleAccountPushCookies 接收用户脚本推送的 Cookie 罐并导入或刷新账户，不经过管理会话。
@@ -73,12 +80,18 @@ func (s *server) handleAccountPushCookies(w http.ResponseWriter, r *http.Request
 		writeAdminError(w, http.StatusBadRequest, "invalid_cookies", err.Error())
 		return
 	}
+	// 老脚本不带该字段时按开启处理，与 aistudio-api 的默认行为一致
+	discoverAll := true
+	if input.DiscoverAll != nil {
+		discoverAll = *input.DiscoverAll
+	}
 	result, err := s.config.Admin.PushAccountCookies(r.Context(), AccountPushInput{
 		StorageState: state,
 		AuthUser:     authUser,
 		Email:        strings.ToLower(strings.TrimSpace(input.Email)),
 		AccountID:    strings.ToLower(strings.TrimSpace(input.AccountID)),
 		Source:       strings.TrimSpace(input.Source),
+		DiscoverAll:  discoverAll,
 	})
 	if err != nil {
 		writeAdminUpstreamError(w, err)

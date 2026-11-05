@@ -82,11 +82,31 @@ func TestAccountPushCookies(t *testing.T) {
 	if input.AuthUser != 1 || input.Email != "user@example.com" || input.Source != "userscript" {
 		t.Fatalf("输入 = %+v", input)
 	}
+	if !input.DiscoverAll {
+		t.Fatal("未带 discover_all 时应默认识别全部子号")
+	}
 	if len(input.StorageState.Cookies) != 4 {
 		t.Fatalf("Cookie 数 = %d", len(input.StorageState.Cookies))
 	}
 	if input.StorageState.Cookies[0].Name != "__Secure-1PSID" || !input.StorageState.Cookies[0].Secure {
 		t.Fatalf("Cookie = %+v", input.StorageState.Cookies[0])
+	}
+}
+
+// TestAccountPushDiscoverAllOptOut 验证显式关闭子号识别时不再传递 discover_all
+func TestAccountPushDiscoverAllOptOut(t *testing.T) {
+	admin := &pushAdmin{}
+	handler := NewHandler(nil, Config{Admin: admin, AccountPushToken: "secret"})
+	body := `{"cookies":` + pushCookiesJSON + `,"discover_all":false}`
+	request := httptest.NewRequest("POST", "/api/accounts/push-cookies", strings.NewReader(body))
+	request.Header.Set("X-Push-Token", "secret")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("推送 = %d %s", recorder.Code, recorder.Body)
+	}
+	if len(admin.inputs) != 1 || admin.inputs[0].DiscoverAll {
+		t.Fatalf("输入 = %+v", admin.inputs)
 	}
 }
 

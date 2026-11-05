@@ -14,7 +14,8 @@ import (
 )
 
 // PushAccountCookies 用用户脚本推送的 Cookie 罐刷新已有账户，账户不存在时按推送的
-// auth_user 验证登录的邮箱并导入新账户。推送接口由独立令牌鉴权，不走管理会话。
+// auth_user 验证登录的邮箱并导入新账户。开启 discover_all 时还会按共享登录罐识别
+// 其它 u/N 子号，一次推送把所有已登录账号都登记上。
 func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.AccountPushInput) (api.AccountPushResult, error) {
 	state := input.StorageState
 	if err := state.Validate(); err != nil {
@@ -47,16 +48,38 @@ func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.Acc
 		verified = true
 	}
 
+	account, created, err := admin.upsertPushedAccount(ctx, accountID, input, state)
+	if err != nil {
+		return api.AccountPushResult{}, err
+	}
+	result := api.AccountPushResult{Account: account, Created: created}
+	if input.DiscoverAll {
+		discovered, discoveryErr := admin.discoverPushedAccounts(ctx, state, input, accountID)
+		result.Discovered = discovered
+		if discoveryErr != nil {
+			result.DiscoveryError = discoveryErr.Error()
+			admin.requests.log(accountID, "WARN", "用户脚本子号识别失败 | 错误="+discoveryErr.Error())
+		} else {
+			verified = true
+		}
+	}
+	result.SessionValid = verifiedPointer(verified)
+	return result, nil
+}
+
+// upsertPushedAccount 刷新已有账户或导入新账户，返回账户与是否为新建
+func (admin *runtimeAdmin) upsertPushedAccount(
+	ctx context.Context,
+	accountID string,
+	input api.AccountPushInput,
+	state aistudio.StorageState,
+) (api.AdminAccount, bool, error) {
 	if account, err := admin.pool.Account(accountID); err == nil {
 		updated, refreshErr := admin.refreshPushedAccount(ctx, account.ID, input, state)
-		if refreshErr != nil {
-			return api.AccountPushResult{}, refreshErr
-		}
-		return api.AccountPushResult{Account: updated, SessionValid: verifiedPointer(verified)}, nil
+		return updated, false, refreshErr
 	} else if !errors.Is(err, aistudio.ErrAccountNotFound) {
-		return api.AccountPushResult{}, accountOperationError(err)
+		return api.AdminAccount{}, false, accountOperationError(err)
 	}
-
 	account, err := admin.ImportAccountState(ctx, api.AccountStateInput{
 		Label: accountID, AuthUser: input.AuthUser, StorageState: state,
 	})
@@ -66,16 +89,44 @@ func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.Acc
 		if errors.As(err, &operationErr) && operationErr.code == "account_exists" {
 			if existing, lookupErr := admin.pool.Account(accountID); lookupErr == nil {
 				updated, refreshErr := admin.refreshPushedAccount(ctx, existing.ID, input, state)
-				if refreshErr != nil {
-					return api.AccountPushResult{}, refreshErr
-				}
-				return api.AccountPushResult{Account: updated, SessionValid: verifiedPointer(verified)}, nil
+				return updated, false, refreshErr
 			}
 		}
-		return api.AccountPushResult{}, err
+		return api.AdminAccount{}, false, err
 	}
 	admin.requests.log(account.ID, "INFO", "账户由用户脚本推送导入 | 会话="+strconv.Itoa(input.AuthUser))
-	return api.AccountPushResult{Account: account, Created: true, SessionValid: verifiedPointer(verified)}, nil
+	return account, true, nil
+}
+
+// discoverPushedAccounts 按同一份登录罐识别全部 u/N 子号，把未登记的账号一并导入
+func (admin *runtimeAdmin) discoverPushedAccounts(
+	ctx context.Context,
+	state aistudio.StorageState,
+	input api.AccountPushInput,
+	primary string,
+) (int, error) {
+	accounts, err := chromeauth.DiscoverCookieAccounts(ctx, &state, admin.effectiveProxy(""))
+	if err != nil {
+		return 0, err
+	}
+	discovered := 0
+	var failures []error
+	for _, item := range accounts {
+		email := strings.ToLower(strings.TrimSpace(item.Email))
+		if email == "" || email == primary {
+			continue
+		}
+		pushed := api.AccountPushInput{
+			AuthUser: item.AuthUser, Email: email, Source: input.Source,
+		}
+		if _, _, err := admin.upsertPushedAccount(ctx, email, pushed, state); err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", email, err))
+			continue
+		}
+		admin.requests.log(email, "INFO", "账户由用户脚本推送自动登记 | 会话="+strconv.Itoa(item.AuthUser))
+		discovered++
+	}
+	return discovered, errors.Join(failures...)
 }
 
 // refreshPushedAccount 在账户租约内合并推送的 Cookie、更新会话序号并重启 Worker
