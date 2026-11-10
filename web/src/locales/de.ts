@@ -64,7 +64,9 @@ export const messages: Record<TranslationKey, string> = {
   'version.confirm': 'Update bestätigen',
   'version.confirmText':
     'Lädt {version} herunter und startet den Dienst neu. {count} laufende Anfragen werden unterbrochen.',
-  'version.installing': 'Programm wird heruntergeladen und ersetzt',
+  'version.downloading': 'Neue Version wird heruntergeladen',
+  'version.verifying': 'Heruntergeladenes Paket wird geprüft',
+  'version.installing': 'Neue Version wird installiert',
   'version.restarting': 'Dienst wird neu gestartet. Die Seite lädt danach automatisch neu.',
   'version.available': '{version} ist verfügbar',
   'version.upToDate': 'Aktuell',
@@ -171,6 +173,16 @@ export const messages: Record<TranslationKey, string> = {
   'accounts.refreshedAll': '{count} Konten aktualisiert, {failed} fehlgeschlagen',
   'accounts.refreshingAll': 'Aktualisiere {done}/{total}',
   'accounts.queued': 'Wartet',
+  'accounts.selectAllRows': 'Alle Konten auswählen',
+  'accounts.selectRow': '{name} auswählen',
+  'accounts.selectedCount': '{count} ausgewählt',
+  'accounts.totalCount': '{count} Konten',
+  'accounts.bulk': 'Sammelaktionen',
+  'accounts.bulkEnabled': '{count} Konten aktiviert, {failed} fehlgeschlagen',
+  'accounts.bulkDisabled': '{count} Konten deaktiviert, {failed} fehlgeschlagen',
+  'accounts.draining': 'Wird deaktiviert · Abschluss',
+  'accounts.drainingRequests': 'Wird deaktiviert · {count} Anfragen offen',
+  'accounts.syncing': 'Wird aktiviert · Modelle synchronisieren',
   'accounts.refreshFailed': 'Fehlgeschlagen',
   'accounts.saved': 'Konto gespeichert',
   'accounts.remoteAdd': 'Remote hinzufügen',
@@ -221,8 +233,8 @@ export const messages: Record<TranslationKey, string> = {
   'logs.loadOlder': 'Ältere Protokolle laden ({count})',
   'logs.reasoning': 'Denken',
   'logs.reply': 'Antwort',
-  'logs.outputTotal': 'Ausgabe gesamt',
-  'logs.averageSpeed': 'Durchschnittliche Geschwindigkeit',
+  'logs.outputTotal': 'Ausgabe',
+  'logs.averageSpeed': 'Ø Tempo',
   'logs.firstToken': 'Erstes Token',
   'logs.details': 'Details',
   'logs.endpoint': 'Endpunkt',
@@ -299,15 +311,45 @@ export const messages: Record<TranslationKey, string> = {
   'settings.perAccountConcurrency': 'Gleichzeitige Anfragen pro Konto',
   'settings.routingStrategy': 'Kontoauswahl',
   'settings.routingRoundRobin': 'Reihum',
+  'settings.accountOrder': 'Kontoreihenfolge',
+  'settings.accountOrderHelp':
+    'Beim Bevorzugen desselben Kontos werden diese Konten der Reihe nach verwendet; ist ein Konto ausgelastet, in der Abklingzeit oder nicht verfügbar, folgt das nächste',
+  'settings.accountOrderUp': '{account} nach oben',
+  'settings.accountOrderDown': '{account} nach unten',
   'settings.routingFillFirst': 'Gleiches Konto bevorzugen',
   'settings.routingHelp':
     'Reihum wechselt die Konten. „Gleiches Konto bevorzugen“ bleibt bei einem Konto, bis es ausgelastet oder nicht verfügbar ist.',
   'settings.waaBackend': 'WAA-Backend',
-  'settings.waaBackendCamoufox': 'Camoufox-Browser',
+  'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',
   'settings.waaBackendHelp':
     'SpiderMonkey läuft im Dienstprozess ohne Camoufox; die Kontoanmeldung braucht weiterhin einen Browser',
-  'settings.upstreamChannels': 'Upstream-Kanäle',
+  'settings.helpFor': 'Info zu {label}',
+  'settings.section.runtime': 'Laufzeit & Kanäle',
+  'settings.section.models': 'Modelle & Protokolle',
+  'settings.workerCapacity': 'Worker-Kapazität',
+  'settings.workerCapacityHelp':
+    'Die Reglerenden legen vorgewärmte Worker und das Spitzenlimit fest: Vorgewärmte Worker sind die beim Start geladenen Konten, das Spitzenlimit ist die Höchstzahl gleichzeitig laufender Worker. Die Camoufox-Startparallelität gibt an, wie viele Worker gleichzeitig kalt starten; die Parallelität pro Konto, wie viele Anfragen ein Konto gleichzeitig ausführt',
+  'settings.capacitySummary': 'Bis zu {requests} gleichzeitige Anfragen über {accounts} Konten',
+  'settings.accountOrderDrag': '{account} zum Sortieren ziehen',
+  'settings.accountOrderRemove': '{account} entfernen',
+  'settings.accountOrderAdd': 'Bevorzugte Konten hinzufügen',
+  'settings.accountOrderClear': 'Bevorzugte Konten leeren',
+  'settings.accountOrderUnset': 'Nicht festgelegt; Konten werden in ID-Reihenfolge verwendet',
+  'settings.accountOrderRest': 'Die übrigen {count} Konten folgen in ID-Reihenfolge',
+  'settings.authPathAdd': 'Pfad hinzufügen',
+  'settings.authPathBrowse': 'Durchsuchen',
+  'settings.authPathRemove': '{path} entfernen',
+  'settings.authPathRow': 'Pfad {index}',
+  'settings.pathPickerTitle': 'Kontodatei oder Verzeichnis auswählen',
+  'settings.pathPickerRoots': 'Laufwerke',
+  'settings.pathPickerUp': 'Eine Ebene höher',
+  'settings.pathPickerEmpty': 'Hier gibt es keine Verzeichnisse oder Kontostatus-Dateien',
+  'settings.pathPickerSelect': 'Dieses Verzeichnis auswählen',
+  'settings.legacy': 'Veraltet',
+  'settings.buildLegacyNotice':
+    'Der Build-Kanal ist upstream deaktiviert; abgelehnte Anfragen laufen über den Standardkanal',
+  'settings.channelRow': '{channel}-Kanal',
   'settings.upstreamChannelsHelp':
     'Standard ist Playground. Build ist der alte Kanal, dessen Generierung upstream eingestellt ist; aktiviert laufen abgelehnte Anfragen über Playground',
   'settings.modelMapping': 'Modellzuordnung',
@@ -328,6 +370,10 @@ export const messages: Record<TranslationKey, string> = {
   'channel.assistant': 'Build-Chat',
   'logs.channel': 'Kanal',
   'models.channels': 'Kanäle',
+  'models.accounts': 'Konten',
+  'models.accountsHelp':
+    'Die automatische Kontoauswahl verwendet nur diese Konten. Ohne Auswahl sind alle Konten verfügbar',
+  'models.accountsSaved': 'Konten gespeichert und aktiv',
   'models.channelAll': 'Alle Kanäle',
   'models.channelSaved': 'Kanal gespeichert und aktiv',
   'settings.activeValue': 'Aktiver Wert',
@@ -539,7 +585,13 @@ export const messages: Record<TranslationKey, string> = {
   'pg.harassment': 'Belästigung',
   'pg.hate': 'Hass',
   'pg.high': 'Hoch',
-  'pg.insertMedia': 'Bilder, Videos, Audio oder Dateien einfügen',
+  'pg.insertMedia': '{types} einfügen',
+  'pg.mediaImages': 'Bilder',
+  'pg.mediaVideos': 'Videos',
+  'pg.mediaAudio': 'Audio',
+  'pg.mediaFiles': 'Dateien',
+  'pg.filesystemTools': 'Dateisystemtools',
+  'pg.filesystemToolsTip': 'Dateisystemtools sind für diesen Agent immer aktiviert',
   'pg.inlineAttachment': 'Als Text einfügen',
   'pg.knowledgeCutoff': 'Wissensstand:',
   'pg.learnMore': 'Weitere Informationen',
@@ -984,6 +1036,27 @@ export const messages: Record<TranslationKey, string> = {
     'Die API-Nutzung wird pausiert, sobald das Limit erreicht ist. Sie können das Token-Limit jederzeit erhöhen.',
   'pg.tokenCapLabel': 'Token-Limit pro Sitzung',
   'pg.removeAttachment': 'Anhang entfernen',
+  'pg.videoSettings': 'Videoeinstellungen',
+  'pg.editVideoOptions': 'Videooptionen bearbeiten',
+  'pg.agenticVideo': 'Agentisches Videoverständnis',
+  'pg.agenticVideoTip': 'Ermöglicht dem Modell, hochgeladene Videos interaktiv zu analysieren',
+  'pg.agenticVideoUnsupported':
+    'Das ausgewählte Modell unterstützt kein agentisches Videoverständnis. Deaktivieren Sie den Schalter oder wechseln Sie zu einem unterstützten Modell.',
+  'pg.videoStart': 'Startzeit (z. B. 1m10s)',
+  'pg.videoEnd': 'Endzeit (z. B. 2m30s)',
+  'pg.videoFps': 'FPS (Bilder pro Sekunde)',
+  'pg.videoFpsPlaceholder': 'Standardmäßig 1 FPS',
+  'pg.videoStartFormat':
+    'Ungültiges Format der Startzeit. Verwenden Sie Stunden, Minuten und Sekunden (z. B. „1h1m10s“ oder „70s“).',
+  'pg.videoEndFormat':
+    'Ungültiges Format der Endzeit. Verwenden Sie Stunden, Minuten und Sekunden (z. B. „1h1m10s“ oder „70s“).',
+  'pg.videoEndAfterStart': 'Die Endzeit muss nach der Startzeit liegen.',
+  'pg.videoStartRange': 'Die Startzeit muss innerhalb der Videodauer liegen (0–{seconds} s).',
+  'pg.videoEndRange': 'Die Endzeit muss innerhalb der Videodauer liegen (1–{seconds} s).',
+  'pg.videoFpsRange': 'FPS muss eine positive Zahl bis höchstens 24 sein.',
+  'pg.videoFile': 'Videodatei',
+  'pg.videoName': 'Name (optional)',
+  'pg.videoNamePlaceholder': 'Namen eingeben',
   'pg.removeStop': 'Stoppsequenz entfernen',
   'pg.removeTool': '{tool} entfernen',
   'pg.rerun': 'Diesen Schritt erneut ausführen',
@@ -1165,6 +1238,67 @@ export const messages: Record<TranslationKey, string> = {
   'pg.fileThumbnail': 'Dateivorschau',
   'pg.sampleMedia': 'Beispielmedien',
   'pg.sampleImageFailed': 'Beispielbild konnte nicht heruntergeladen werden: {detail}',
+  'pg.uploadFailed': 'Datei konnte nicht in Drive hochgeladen werden: {detail}',
+  'pg.environment': 'Umgebung',
+  'pg.toggleEnvironment': 'Umgebungseinstellungen ein- oder ausblenden',
+  'pg.environmentDescription':
+    'Jede Ausführung startet eine isolierte Umgebung, in der Ihr Agent Code ausführen und Dateien verwalten kann.',
+  'pg.environmentType': 'Typ',
+  'pg.environmentTypeTip': 'Typ der zu verwendenden Umgebung',
+  'pg.environmentMode': 'Umgebungsmodus',
+  'pg.environmentNew': 'Neu',
+  'pg.environmentExisting': 'Vorhanden',
+  'pg.environmentId': 'ID',
+  'pg.environmentIdTip': 'ID der vorhandenen Umgebung, die verwendet werden soll',
+  'pg.environmentIdLabel': 'Umgebungs-ID',
+  'pg.environmentIdPlaceholder': 'Umgebungs-ID eingeben',
+  'pg.downloadNeedsId': 'Geben Sie eine Umgebungs-ID ein, um die Umgebung herunterzuladen',
+  'pg.apiKeyNotFound': 'API-Schlüssel nicht gefunden.',
+  'pg.switchEnvironmentTitle': 'Zu einer neuen Umgebung wechseln?',
+  'pg.switchEnvironmentBody':
+    'Wenn Sie mit der Umgebung „Neu“ fortfahren, wird in der nächsten Runde der Unterhaltung eine neue Umgebung erstellt.',
+  'pg.stayExistingEnvironment': 'In vorhandener Umgebung bleiben',
+  'pg.confirm': 'Bestätigen',
+  'pg.environmentSources': 'Quellen',
+  'pg.sourcesTip': 'Quellen, die in der Umgebung bereitgestellt werden',
+  'pg.addSources': 'Quellen hinzufügen',
+  'pg.viewSources': 'Quellen ansehen',
+  'pg.viewRules': 'Regeln ansehen',
+  'pg.oneSource': '1 Quelle',
+  'pg.sourceCount': '{count} Quellen',
+  'pg.environmentNetwork': 'Netzwerk',
+  'pg.networkTip': 'Netzwerkkonfiguration der Umgebung',
+  'pg.addRules': 'Regeln hinzufügen',
+  'pg.oneRule': '1 Regel',
+  'pg.ruleCount': '{count} Regeln',
+  'pg.addSource': 'Quelle hinzufügen',
+  'pg.addNewSource': 'Neue Quelle hinzufügen',
+  'pg.noSourceYet': 'Noch keine Quelle hinzugefügt',
+  'pg.inlineFile': 'Inline-Datei',
+  'pg.gcsBucket': 'GCS-Bucket',
+  'pg.repository': 'Repository',
+  'pg.mountingPath': 'Bereitstellungspfad',
+  'pg.deleteFile': 'Datei löschen',
+  'pg.fileContent': 'Dateiinhalt',
+  'pg.cloudStorageUri': 'Cloud Storage-URI',
+  'pg.repoUri': 'Repository-URI',
+  'pg.sourceUrlPlaceholder': 'Quell-URL (z. B. {example})',
+  'pg.networkTitle': 'Netzwerkkonfiguration',
+  'pg.networkDescription':
+    'Netzwerkanfragen innerhalb der VM werden in AI Studio über eine Zulassungsliste gesteuert. Die VM kann nur auf die unten aufgeführten Domains zugreifen.',
+  'pg.addToAllowlist': 'Zur Zulassungsliste hinzufügen',
+  'pg.domain': 'Domain',
+  'pg.domainPlaceholder': 'Domain (z. B. github.com, *.googleapis.com)',
+  'pg.deleteRule': 'Regel löschen',
+  'pg.addHttpHeader': 'HTTP-Header hinzufügen',
+  'pg.headerName': 'Header-Name',
+  'pg.headerValue': 'Hier eingeben',
+  'pg.deleteHeader': 'HTTP-Header löschen',
+  'pg.seeLess': 'Weniger anzeigen',
+  'pg.toggleDisclaimer': 'Haftungsausschluss ein- oder ausblenden',
+  'pg.seeDisclaimer': 'Haftungsausschluss anzeigen',
+  'pg.allowlistWarning':
+    'Seien Sie vorsichtig, wenn Sie der Zulassungsliste neue Domains hinzufügen – der Agent erhält dadurch Zugriff auf diese Dienste. Wenn Sie Anmeldedaten angeben, kann sich der Agent authentifizieren, in Ihrem Namen handeln und unbeabsichtigte Aktionen ausführen',
   'pg.sampleVideos': 'Videos',
   'pg.sampleAnimal': 'Tiere',
   'pg.sampleArchitecture': 'Architektur',
@@ -1259,24 +1393,24 @@ export const messages: Record<TranslationKey, string> = {
     'Ein Icon mit einem niedlichen Dreifinger-Faultier, das an einem moosigen Ast hängt, vor sauberem weißem Hintergrund, im farbenfrohen, haptischen 3D-Stil aus Vinyl und Filz.',
   'zero.flashLite.subtitle':
     'Intelligenz mit extrem geringer Latenz und niedrigen Kosten für Extraktion und Klassifizierung in großen Mengen sowie sofortige UI-Generierung.',
-  'zero.flashLite.starter1': '1.000 Support-Tickets in strenges JSON einordnen',
+  'zero.flashLite.starter1': 'Einen Satz im passenden Ton vervollständigen',
   'zero.flashLite.starter1Prompt':
-    'Entwirf einen kompakten, tokensparenden Systemprompt und ein JSON-Schema, um Kundensupport-Nachrichten nach Dringlichkeit, Produktbereich und Stimmung zu klassifizieren.',
-  'zero.flashLite.starter2': 'Befehlspalette ohne Abhängigkeiten bauen',
+    'Vervollständige den Satz direkt im Anschluss. Gib nur die nächsten 3 bis 6 Wörter aus. Triff den förmlichen Geschäftston und hör am Ende der Phrase sofort auf.\n\n„Im Anschluss an unser vierteljährliches Review-Meeting haben wir Ihre Budgetzuweisung geprüft und beschlossen,“',
+  'zero.flashLite.starter2': 'Ein komplexes Konzept schnell erklären',
   'zero.flashLite.starter2Prompt':
-    'Erstelle eine tastaturorientierte Befehlspalette in reinem HTML, CSS und JS mit unscharfer Suche, Tastenkürzel-Badges und sofortigen Ergebnissen.',
-  'zero.flashLite.starter3': 'Unordentliche Katalogattribute als NDJSON normalisieren',
+    'Erkläre in 3 Sätzen, was ein „Schwarzes Loch“ ist, sodass es ein 10-jähriges Kind versteht.',
+  'zero.flashLite.starter3': 'Text aus Kassenbelegen extrahieren',
   'zero.flashLite.starter3Prompt':
-    'Wandle unstrukturierte E-Commerce-Produktbeschreibungen in normalisiertes, zeilengetrenntes JSON (NDJSON) um, mit einheitlichen Einheiten, Farben und Maßen.',
-  'zero.flashLite.example1': 'Playglow-Pixel-Arcade',
+    'Extrahiere die Kaufdetails aus dem Belegtext. Halte dich exakt an das vorgegebene JSON-Schema. Füge keine Markdown-Codeblöcke und keine Gesprächsfloskeln hinzu.\n\nSchema:\n{\n  "vendor": string,\n  "date": "YYYY-MM-DD",\n  "currency": string,\n  "items": [{"name": string, "quantity": integer, "total_price": float}],\n  "subtotal": float,\n  "tax": float,\n  "total": float\n}\n\nBelegtext:\nBLUE BOTTLE COFFEE #104\n03/14/2025  09:12 AM\n1x Hayes Valley Espresso    $4.50\n2x Almond Croissant         $9.50\nSubtotal: $14.00\nTax (8.875%): $1.24\nTotal: $15.24\nVISA ENDING IN 8831',
+  'zero.flashLite.example1': 'Räumliche Konzept-Leinwand',
   'zero.flashLite.example1Prompt':
-    'Beantworte vier verspielte Fragen und spiele dein eigenes Pixel-Art-Spiel auf einem 3D-Arcade-Automaten, der nur für dich gestaltet ist.',
-  'zero.flashLite.example2': 'Schuhkarton-Belege als JSON',
+    'Erkunde Ideen auf einem unendlichen Raster, auf dem jeder Klick auf eine Zelle Konzepte in Echtzeit zu verwandten Unterthemen erweitert.',
+  'zero.flashLite.example2': 'Interaktives Bildwörterbuch',
   'zero.flashLite.example2Prompt':
-    'Lege einen Stapel zerknitterter Belege ab und extrahiere jeden Händler, jede Position, Steuer und Summe als sauberes strukturiertes JSON und CSV.',
-  'zero.flashLite.example3': 'Fresnel-Code-Prüfer',
+    'Erkunde interaktive Szenen, um Gegenstände zu übersetzen, Aussprachen anzuhören und Vokabeln in einer neuen Sprache zu üben.',
+  'zero.flashLite.example3': 'Von der Stimme zum visuellen Moodboard',
   'zero.flashLite.example3Prompt':
-    'Prüfe Webseiten und Quelldateien auf Verbesserungen bei Leistung, Barrierefreiheit und Struktur, mit sofortigem visuellem Feedback.',
+    'Sprich Ideen laut aus, um Karten für ein visuelles Moodboard in Echtzeit zu erzeugen, anzuordnen und zu verfeinern.',
   'zero.flash.subtitle':
     'Schnelle multimodale Intelligenz auf Spitzenniveau für reaktionsschnelle Apps und Workflows mit hohem Durchsatz.',
   'zero.flash.starter1': 'Handskizze in eine funktionierende UI verwandeln',
@@ -1288,15 +1422,53 @@ export const messages: Record<TranslationKey, string> = {
   'zero.flash.starter3': 'Aktuelle Flug- und Wetterstörungen vergleichen',
   'zero.flash.starter3Prompt':
     'Suche nach aktuellen Verspätungen an großen Flughäfen und Unwetterwarnungen und fasse die am stärksten betroffenen Strecken in einer strukturierten Tabelle zusammen.',
-  'zero.flash.example1': 'Neon-Snake 3D',
+  'zero.flash.example1': 'Agent für Finanzrecherche',
   'zero.flash.example1Prompt':
-    'Baue ein rasantes Neon-Raster-Snake-Spiel mit flüssigen Partikelspuren, leuchtenden Sammelkugeln und einer Live-Bestenliste.',
-  'zero.flash.example2': 'Lumina Shader-Studio',
+    'Ein autonomer Agent für Finanzrecherche, der SEC-Einreichungen sammelt, Reasoning-Zeitleisten verarbeitet und interaktive Aktienanalyseberichte erstellt.',
+  'zero.flash.example2': 'Interaktiver Jahresbericht',
   'zero.flash.example2Prompt':
-    'Gestalte einen interaktiven Festivalguide mit animierten Bühnen-Line-ups, Hörproben der Acts und einem eigenen Zeitplan-Builder.',
-  'zero.flash.example3': 'Karten-Stylist',
+    'Interaktiver Wirkungsbericht 2026 für The Urban Hive Project mit quantitativen Biodiversitätsdaten, der Ausweitung von Dach-Bienenständen in ganz London und qualitativen Geschichten aus der Gemeinschaft, umgesetzt mit flüssigen Federanimationen und redaktionellem Design.',
+  'zero.flash.example3': 'Dinosaurierfossil-Explorer',
   'zero.flash.example3Prompt':
-    'Erstelle ein interaktives Tool zur Kartengestaltung, das aus einer Stimmungsbeschreibung eigene Farbpaletten und Themen für Sehenswürdigkeiten erzeugt.',
+    'Ein interaktives paläontologisches Feldtagebuch, das Dinosaurierfossilien mit Gemini in lebensechte Rekonstruktionen und detaillierte anatomische Diagramme verwandelt.',
+  'zero.omni12.subtitle':
+    'Generierung und Bearbeitung von bis zu 15 Sekunden langen Videos mit nativem Audio aus Text, Bildern und Videos, mit stärkerer Konsistenz von Figuren und Motiven.',
+  'zero.omni12.starter1': 'Snorricam auf einen stürmenden Ritter richten',
+  'zero.omni12.starter1Prompt':
+    'Snorricam-Aufnahme: Ein am Körper befestigtes Rig fixiert das schlammbespritzte Gesicht eines mittelalterlichen Ritters, während er über ein regendurchtränktes Schlachtfeld stürmt. Sein Gesicht bleibt in der Bildmitte fixiert, während Banner, Schilde und Gewitterwolken bei jedem Schritt ruckartig schwanken. Audio: nur seine Schritte, klirrende Rüstung und Regen. Kein sichtbares Kamera-Rig.',
+  'zero.omni12.starter2': 'Crash-Zoom vom Schiffbrüchigen auf seine Insel',
+  'zero.omni12.starter2Prompt':
+    'Eine durchgehende Einstellung: Beginne mit einer Nahaufnahme eines Schiffbrüchigen, der neben einem Stück Treibholz im nassen Sand kniet, und zoome dann per Crash-Zoom mit hoher Geschwindigkeit heraus, bis er nur noch ein winziger Punkt am Ufer einer riesigen Dschungelinsel ist, umgeben von Vulkanklippen und tiefblauem Ozean. Audio: plätschernde Wellen und im Wind raschelnde Palmwedel.',
+  'zero.omni12.starter3': 'Tilt nach unten und Dolly-in auf eine sprechende Archivarin',
+  'zero.omni12.starter3Prompt':
+    'Eine durchgehende Einstellung ohne Schnitt: Neige die Kamera von der sonnenbeschienenen Kuppel einer riesigen Archivrotunde nach unten und fahre dann schnell über den Marmorboden bis zu einer Nahaufnahme einer Archivarin in einem safranfarbenen Umhang. Sie schiebt einen Bronzezylinder in eine Konsole und sagt ruhig: „Der Zensus der äußeren Provinz ist seit drei Jahrhunderten versiegelt.“',
+  'zero.omni12.example1': 'Ramen-Bar-Diorama, vom ersten bis zum letzten Frame',
+  'zero.omni12.example1Prompt':
+    'Beginne mit dem ersten Frame des isometrischen Dioramas einer Ramen-Bar an einer Tokioter Straßenecke und ende mit dem letzten Frame im Inneren des Ladens: Stoße in einer einzigen durchgehenden Kamerafahrt hinab auf den Gehweg, schlüpfe direkt unter dem Noren-Vorhang hindurch an die belebte Theke, während der Koch eine dampfende Schüssel überreicht, und lande beim Schlürfen des Gastes. Halte dabei den Miniatur-Diorama-Stil und die Identität der Figuren fest.',
+  'zero.omni12.example2': 'Gewächshausszene mit vier Figuren',
+  'zero.omni12.example2Prompt':
+    'Eine fixierte, filmische Einstellung im preisgekrönten 3D-Animationsstil von einem rustikalen Pflanztisch in einem nebligen viktorianischen Glashaus-Wintergarten ([location_style_image_0]. Design, Maßstab und Struktur des Ortes sollen dem Referenzbild [location_style_image_0] entsprechen, und alle Figuren fügen sich nahtlos und natürlich in die Umgebung von [location_style_image_0] ein), mit der feuchten, üppigen Akustik eines Wintergartens aus Glas und Eisen – weicher, schimmernder Nachhall von beschlagenen Glasscheiben und Wassertropfen, die sanft auf breite Farnblätter prasseln. Ausschließlich diese vier Tierfiguren erscheinen in der Szene, wobei das in [location_style_image_1] gezeigte relative Größenverhältnis exakt eingehalten wird; immer wenn eine Figur spricht oder lächelt, müssen Design und Struktur ihres Mundes ihrer Mund-Nahaufnahme als Referenz entsprechen: Auf dem Tisch sitzen Figur 0, Pip, das durchscheinende rosa Geleewesen mit seiner leuchtenden Blume ([character_0_image_0], [character_0_image_1], [character_0_image_2]), und Figur 1, Cosmo, das pastellfarbene Regenbogenchamäleon ([character_1_image_0], [character_1_image_1], [character_1_image_2]); neben dem Tisch stehen Figur 2, Arthur, das sandbraune gepanzerte Schuppentier ([character_2_image_0], [character_2_image_1], [character_2_image_2]), und Figur 3, Mateo, das Wasserschwein mit seinem marineblauen geblümten Bandana ([character_3_image_0], [character_3_image_1], [character_3_image_2]). Strikte Lippensynchronität der Sprecher und zweistufiges Dialog-Timing: [0.5s–3.9s] Nur Figur 1 (Cosmo, das pastellfarbene Regenbogenchamäleon, mit dem feinen Munddesign aus [character_1_image_1]) bewegt den Mund, beäugt eine leuchtend rosa Orchidee neben sich, kneift die Augenlider zusammen und verkündet deutlich und ohne ein Wort zu verschlucken mit frecher, extravaganter, theatralischer Kritikerstimme und dramatischen Tonhöhensprüngen: „Entschuldigung, diese Orchidee kopiert meine Farbpalette! Ich verlange Tantiemen!“ [4.1s–7.2s] Nur Figur 0 (Pip, das durchscheinende rosa Geleewesen, mit dem feinen Munddesign aus [character_0_image_1]) kichert mit luftiger, unschuldiger, sprudelnder Elfenstimme und spricht sauber vor 7.2s zu Ende: „Ich glaube, sie will nur zu deinem Schwanz passen, Cosmo!“ [7.2s–8.2s] Kurzer stiller Reaktionsmoment im Wintergarten. [8.3s–11.0s] Nur Figur 2 (Arthur, das gepanzerte Schuppentier, mit dem feinen Munddesign aus [character_2_image_1], während Cosmo schweigt) faltet die Krallen und murmelt mit schüchternem, überaus höflichem Gelehrtentenor: „Genau genommen hat sie hier letzten Dienstag geblüht …“ [11.2s–13.3s] Nur Figur 3 (Mateo, das Wasserschwein mit seinem marineblauen geblümten Bandana, mit dem feinen Munddesign aus [character_3_image_1]) stößt mit tiefem, sanftem Zen-Bariton einen langsamen, glückseligen Seufzer aus: „Mann, leg dich nicht mit den Pflanzen an.“ [13.3s–14.9s] Stilles, friedliches Halten der Reaktion, nach 14.9s kein gesprochenes Wort mehr. Halte während der gesamten Einstellung eine 100% originalgetreue 1:1-Wiedergabe aller bereitgestellten Referenzbilder und Details strikt ein – die exakten Gesichtszüge jeder Figur, Augengröße, Munddesign, Outfit- und Körpergeometrie, Farben, Proportionen, die relative Größenaufstellung ([location_style_image_1]) und das exakte Layout der Umgebung ([location_style_image_0]) müssen zu 100% mit den Referenzbildern übereinstimmen, ohne jede visuelle Abweichung oder Veränderung.',
+  'zero.omni12.example3': 'Bienenstock-Wissenschaftsclip mit Live-Beschriftungen',
+  'zero.omni12.example3Prompt':
+    'Ein 15-sekündiger Wissenschaftsclip im lebenden Bienenstock aus Bild 1, in vier Einstellungen, die durch harte Schnitte verbunden sind.',
+  'zero.omni.subtitle':
+    'Verschachtelte multimodale Generierung, die Text-, Bild- und Videovorlagen in Echtzeit zum Leben erweckt.',
+  'zero.omni.starter1': 'Einem Surfer durch die Wellenröhre folgen',
+  'zero.omni.starter1Prompt':
+    'Verwende dieses Bild als Anfangsframe. Verfolge den Surfer in einer durchgehenden filmischen Einstellung durch die Röhre der Welle, mit natürlicher Gischt und Sonnenlicht, das durch das Wasser fällt.',
+  'zero.omni.starter2': 'Tiefsee-Storyboard und Animatic in 4 Einstellungen inszenieren',
+  'zero.omni.starter2Prompt':
+    'Inszeniere ausgehend von diesem Frame eines Tiefsee-Tauchboots eine Sequenz aus 4 Einstellungen, in der die biolumineszente versunkene Kathedrale entdeckt wird: weiter Abstieg, Enthüllung im Cockpit-Scheinwerferlicht, Makroaufnahme erwachender Korallen und langsame Rückwärtsfahrt der Kamera.',
+  'zero.omni.starter3': 'Modefilm in Zeitlupe mit Orbit-Kamerafahrt',
+  'zero.omni.starter3Prompt':
+    'Verwende dieses Bild als Anfangsframe für einen Modefilm. Umkreise das Motiv langsam, während sich der bestickte purpurrote Stoff in einer sanften Meeresbrise bewegt.',
+  'zero.omni.example1': 'Diorama aus biolumineszenter Tinte',
+  'zero.omni.example1Prompt':
+    'Ultra-Zeitlupen-Makrovideo mit 1000fps: Ein einzelner Tropfen mitternachtsblauer und goldener Tinte fällt in eine Kristallglasschale, die von der Sonne der goldenen Stunde von hinten beleuchtet wird, und entfaltet sich zu einem durchscheinenden Kampffisch und leuchtenden Lotusblüten.',
+  'zero.omni.example2': 'Tracking-Shot durch das verregnete Neon-Tokio',
+  'zero.omni.example2Prompt':
+    'Dolly-Aufnahme aus niedriger Perspektive mit 35-mm-Anamorphot, die zur blauen Stunde durch eine regennasse Gasse in Tokio gleitet, während sich warme rote Izakaya-Papierlaternen und cyanfarbene Neon-Kanji in kräuselnden Pfützen spiegeln.',
+  'zero.builtBy': 'Erstellt mit {model}',
   'zero.pro.subtitle':
     'Tiefes logisches Denken, Synthese langer Kontexte und Softwareentwicklung auf Produktionsniveau.',
   'zero.pro.starter1': 'WebGL2-Simulator für Wassererosion bauen',
@@ -1550,29 +1722,19 @@ export const messages: Record<TranslationKey, string> = {
   'nav.usage': 'Nutzung',
   'common.undo': 'Rückgängig',
   'accounts.deletedNamed': 'Konto {name} gelöscht',
+  'accounts.deletedCount': '{count} Konten gelöscht',
   'logs.body': 'Anfrage- und Antwortinhalt',
   'logs.requestBody': 'Anfrageinhalt',
   'logs.responseBody': 'Antwortinhalt',
   'logs.bodyMissing':
     'Kein Inhalt gespeichert. Aktivieren Sie „Anfrageinhalte speichern“ in den Einstellungen',
   'settings.section.service': 'Dienst',
-  'settings.section.serviceHelp':
-    'Start des Generierungsdienstes, Listen-Adresse und Speicherort der Kontodateien',
   'settings.section.capacity': 'Kapazität',
-  'settings.section.capacityHelp':
-    'Anzahl der Worker, gleichzeitige Kaltstarts und Kontoverteilung',
-  'settings.section.upstream': 'Upstream',
-  'settings.section.upstreamHelp': 'Upstream-Kanäle, WAA-Ausführung und Zeitlimits',
   'settings.section.network': 'Netzwerk',
-  'settings.section.networkHelp':
-    'Standard-Netzwerkausgang für Anmeldung, Import und Kontoanfragen',
   'settings.section.security': 'Sicherheit und Protokollierung',
-  'settings.section.securityHelp':
-    'Konsolenanmeldung, Speicherung von Anfrageinhalten und Protokolldateien',
   'settings.effect.immediate': 'Gilt sofort nach dem Speichern',
   'settings.effect.service': 'Gilt nach dem Neustart des Generierungsdienstes',
   'settings.effect.management': 'Gilt nach einem Neustart der App',
-  'settings.unsavedField': 'Nicht gespeichert',
   'settings.unsavedSection': 'Dieser Bereich enthält nicht gespeicherte Änderungen',
   'settings.unsavedBar': 'Nicht gespeicherte Änderungen',
   'settings.unsavedCount': '{count} nicht gespeicherte Änderungen',
@@ -1582,6 +1744,9 @@ export const messages: Record<TranslationKey, string> = {
   'settings.discard': 'Verwerfen',
   'settings.autoStart': 'Generierungsdienst automatisch starten',
   'settings.autoStartHelp': 'Startet den Generierungsdienst, sobald das Verwaltungsprogramm läuft.',
+  'settings.hideDockIcon': 'Dock-Symbol ausblenden',
+  'settings.hideDockIconHelp':
+    'Das Symbol nur in der Menüleiste anzeigen. Der Dienst läuft nach dem Schließen des Fensters weiter; öffnen Sie es über die Menüleiste oder den Ordner „Programme“ erneut.',
   'settings.listenHelp': 'Listen-Adresse, die Konsole und öffentliche API gemeinsam nutzen.',
   'settings.previewListenHelp':
     'Eigener Ursprung für HTML-Vorschauen im API-Playground, geöffnet mit dem aktuellen Hostnamen und diesem Port, anders als der Listen-Port.',
@@ -1612,12 +1777,6 @@ export const messages: Record<TranslationKey, string> = {
   'settings.keyDuplicate':
     'Schlüssel {key} steht bereits in der Liste und wurde nicht erneut hinzugefügt',
   'settings.authPathHelp': 'Kontodatei, Verzeichnis oder mehrere durch Kommas getrennte Pfade.',
-  'settings.warmWorkerLimitHelp':
-    'Anzahl der Konten, die nach dem Start des Generierungsdienstes vorgewärmt bereitstehen.',
-  'settings.maxActiveWorkersHelp': 'Maximal gleichzeitig laufende Worker zu Spitzenzeiten',
-  'settings.warmStartupConcurrencyHelp': 'Gleichzeitig kalt startende Camoufox-Worker',
-  'settings.perAccountConcurrencyHelp':
-    'Anzahl der Anfragen, die ein Konto gleichzeitig bearbeitet.',
   'settings.buildNativeHelp': 'Nicht-Streaming-Anfragen nutzen bevorzugt Build, sonst Playground',
   'settings.nonstreamKeepaliveHelp':
     'Sendet beim Warten alle 10 Sekunden einen Zeilenumbruch, damit Reverse-Proxys die Verbindung offen halten',
@@ -1844,8 +2003,6 @@ export const messages: Record<TranslationKey, string> = {
   'theme.dark': 'Dunkel',
   'nav.access': 'Anbindung',
   'section.access.title': 'Anbindung',
-  'section.access.description':
-    'Dienst-URLs und Schlüssel, Client-Einrichtung, Codebeispiele für jede Funktion und alle Endpunkte',
   'access.nav.start': 'Schnellstart',
   'access.nav.clients': 'Clients',
   'access.nav.capabilities': 'Funktionen',
@@ -1897,6 +2054,7 @@ export const messages: Record<TranslationKey, string> = {
   'access.tierHaiku': 'Modell für Haiku',
   'access.importCCSwitch': 'In CC Switch importieren',
   'access.importCherry': 'In Cherry Studio importieren',
+  'access.importMagpie': 'In Magpie importieren',
   'access.importHelp':
     'Die App muss auf diesem Computer installiert sein; den Import in der App bestätigen',
   'access.dockerNote':
@@ -1904,37 +2062,36 @@ export const messages: Record<TranslationKey, string> = {
   'access.client.claude':
     'Terminal-Coding-Agent von Anthropic, angebunden über Anthropic Messages, mit eigenem Modell für die Stufen Opus, Sonnet und Haiku',
   'access.client.codex': 'Terminal-Coding-Agent von OpenAI, angebunden über OpenAI Responses',
-  'access.client.geminiCli': 'Terminal-Agent von Google, angebunden über die Gemini API',
   'access.client.opencode':
-    'Open-Source-Coding-Agent für das Terminal, angebunden als OpenAI-kompatibler Anbieter mit allen Chat-Modellen',
+    'Open-Source-Coding-Agent für das Terminal, mit allen Chat-Modellen in der Konfiguration',
   'access.client.openclaw':
-    'Open-Source-Assistenz-Agent, angebunden als OpenAI-kompatibler Anbieter',
-  'access.client.hermes':
-    'Open-Source-Agent von Nous Research, angebunden als benutzerdefinierter Anbieter',
+    'Open-Source-Assistenz-Agent, angebunden als benutzerdefinierter Anbieter in der Konfiguration',
+  'access.client.magpie':
+    'Modell-Gateway, das die Modelle dieses Dienstes für Claude Code, Codex und weitere Agenten bereitstellt',
   'access.client.pi':
     'Open-Source-Coding-Agent für das Terminal, angebunden als benutzerdefinierter Anbieter in models.json',
-  'access.client.omp':
-    'Erweiterte Version von pi: Chat über die OpenAI-kompatible API, Websuche über die Gemini API',
+  'access.client.omp': 'Erweiterte Version von pi, Websuche über die Gemini API',
   'access.client.dsh':
-    'Terminal-Agent von DeepSeek, mit einem OpenAI-kompatiblen Anbieter aus einer Patch-Datei',
+    'Terminal-Agent von DeepSeek, mit einem benutzerdefinierten Anbieter aus einer Patch-Datei',
   'access.client.cherry':
     'Desktop-KI-Client, der Anbieter vom Typ OpenAI, Gemini oder Anthropic hinzufügt',
   'access.client.sillytavern':
-    'Chat-Frontend für Rollenspiele, mit der Quelle Google AI Studio und einem Reverse-Proxy',
+    'Chat-Frontend für Rollenspiele, mit einer Chat-Completion-Quelle und einem Reverse-Proxy',
   'access.client.openWebui':
     'Selbst gehostete Web-Chat-Oberfläche, mit einer OpenAI-kompatiblen Verbindung',
-  'access.client.lobechat': 'Open-Source-Chat-App, mit einer Proxy-URL beim Anbieter Google',
-  'access.client.newApi': 'API-Gateway und Verteilsystem, mit einem Gemini-Kanal',
+  'access.client.lobechat': 'Open-Source-Chat-App, mit einer Proxy-URL beim passenden Anbieter',
+  'access.client.newApi':
+    'API-Gateway und Verteilsystem, mit einem Kanal für das gewählte Protokoll',
   'access.step.envRun': 'Umgebungsvariablen im Terminal setzen und {name} starten',
-  'access.step.geminiAuth':
-    'Folgendes in die Einstellungsdatei von {name} aufnehmen, um die Authentifizierung per Gemini-API-Schlüssel zu wählen',
   'access.step.settingsFile':
     'Oder Folgendes in die Einstellungsdatei aufnehmen und {name} danach direkt starten',
   'access.step.configFile': 'Folgendes in die Konfigurationsdatei von {name} aufnehmen',
   'access.step.keyRun': 'Schlüsselvariable im Terminal setzen und {name} starten',
-  'access.step.envFile': 'Oder die .env-Datei schreiben und {name} danach direkt starten',
   'access.step.ompSearch': 'In config.yml die Rolle Websuche dem Gemini-Anbieter zuweisen',
   'access.step.patchFile': 'Folgenden Inhalt als Patch-Datei speichern',
+  'access.step.magpieImport': 'Oder im Terminal importieren',
+  'access.step.magpieManual':
+    'Zum manuellen Hinzufügen in {name} unter Providers „Add provider“ und dann „Custom provider“ wählen und diese Felder ausfüllen',
   'access.step.cherry':
     'Unter „Einstellungen → Modelldienst“ einen Anbieter mit den Feldern unten hinzufügen und dann die gewünschten Modelle aus seiner Modellliste hinzufügen',
   'access.step.sillytavern':
@@ -1943,7 +2100,7 @@ export const messages: Record<TranslationKey, string> = {
     'Unter „Admin-Bereich → Einstellungen → Verbindungen“ bei OpenAI API eine Verbindung mit den Feldern unten hinzufügen',
   'access.step.dockerEnv': 'Bei einer Docker-Bereitstellung geht es auch über Umgebungsvariablen',
   'access.step.lobechat':
-    'Unter „Einstellungen → KI-Dienstanbieter → Google“ die Felder unten ausfüllen und den Anbieter aktivieren',
+    'Unter „Einstellungen → KI-Dienstanbieter“ den unten genannten Anbieter öffnen, die Felder ausfüllen und ihn aktivieren',
   'access.step.newApi':
     'Unter „Channels“ auf „Create Channel“ klicken, den Anbieter wählen und die Felder unten ausfüllen',
   'access.field.cherryType': 'Anbietertyp',
@@ -1953,10 +2110,14 @@ export const messages: Record<TranslationKey, string> = {
   'access.field.stSource': 'Quelle für Chat-Vervollständigung',
   'access.field.stUrl': 'Proxy-Server-URL',
   'access.field.stPassword': 'Proxy-Passwort',
-  'access.field.stModel': 'Google-Modell',
+  'access.field.stModel': 'Modell',
   'access.field.webuiKey': 'Schlüssel',
   'access.field.lobeKey': 'API-Schlüssel',
   'access.field.lobeUrl': 'API-Proxy-URL',
+  'access.field.lobeResponses': 'Responses API-Spezifikation verwenden',
+  'access.field.lobeOn': 'An',
+  'access.field.webuiApiType': 'API-Typ',
+  'access.field.webuiResponses': 'Responses',
   'access.field.newapiProvider': 'Provider',
   'access.field.newapiUrl': 'Base URL',
   'access.field.newapiKey': 'API Key',

@@ -64,7 +64,9 @@ export const messages: Record<TranslationKey, string> = {
   'version.confirm': '更新する',
   'version.confirmText':
     '{version} をダウンロードしてサービスを再起動します。進行中の {count} 件のリクエストは中断されます。',
-  'version.installing': 'ダウンロードしてプログラムを置き換えています',
+  'version.downloading': '新しいバージョンをダウンロードしています',
+  'version.verifying': 'リリースパッケージを検証しています',
+  'version.installing': '新しいバージョンをインストールしています',
   'version.restarting': 'サービスを再起動しています。完了するとページを再読み込みします',
   'version.available': '{version} が利用可能です',
   'version.upToDate': '最新です',
@@ -172,6 +174,16 @@ export const messages: Record<TranslationKey, string> = {
   'accounts.refreshedAll': '{count} 件のアカウントを更新しました（失敗 {failed} 件）',
   'accounts.refreshingAll': '更新中 {done}/{total}',
   'accounts.queued': '待機中',
+  'accounts.selectAllRows': 'すべてのアカウントを選択',
+  'accounts.selectRow': '{name} を選択',
+  'accounts.selectedCount': '{count} 件選択中',
+  'accounts.totalCount': '{count} 件のアカウント',
+  'accounts.bulk': '一括操作',
+  'accounts.bulkEnabled': '{count} 件のアカウントを有効にしました（失敗 {failed} 件）',
+  'accounts.bulkDisabled': '{count} 件のアカウントを無効にしました（失敗 {failed} 件）',
+  'accounts.draining': '無効化中 · 後処理中',
+  'accounts.drainingRequests': '無効化中 · 残り {count} 件',
+  'accounts.syncing': '有効化中 · モデルを同期',
   'accounts.refreshFailed': '更新失敗',
   'accounts.saved': 'アカウントを保存しました',
   'accounts.remoteAdd': 'リモートで追加',
@@ -300,15 +312,45 @@ export const messages: Record<TranslationKey, string> = {
   'settings.perAccountConcurrency': 'アカウントあたりの同時リクエスト数',
   'settings.routingStrategy': 'アカウントの選択方法',
   'settings.routingRoundRobin': 'ラウンドロビン',
+  'settings.accountOrder': 'アカウントの順序',
+  'settings.accountOrderHelp':
+    '同じアカウントを優先する場合、この順序で使用し、上限到達・クールダウン中・利用不可のときは次のアカウントに切り替えます',
+  'settings.accountOrderUp': '{account} を上へ移動',
+  'settings.accountOrderDown': '{account} を下へ移動',
   'settings.routingFillFirst': '同じアカウントを優先',
   'settings.routingHelp':
     'ラウンドロビンは順番にアカウントを使い、同じアカウントを優先すると上限到達か利用不可まで同じアカウントを使います',
   'settings.waaBackend': 'WAA バックエンド',
-  'settings.waaBackendCamoufox': 'Camoufox ブラウザ',
+  'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',
   'settings.waaBackendHelp':
     'SpiderMonkey はサービス プロセス内で動作し Camoufox 不要。アカウントのログインにはブラウザが必要',
-  'settings.upstreamChannels': '上流チャネル',
+  'settings.helpFor': '{label}の説明',
+  'settings.section.runtime': '実行とチャネル',
+  'settings.section.models': 'モデルとプロトコル',
+  'settings.workerCapacity': 'Worker 容量',
+  'settings.workerCapacityHelp':
+    'スライダーの両端は常駐 Worker 数とピーク時の上限です。常駐数は起動時に準備するアカウント数、上限は同時に動かせる Worker の最大数です。Camoufox 同時起動数は同時にコールドスタートする Worker 数、アカウントごとの同時リクエスト数は 1 アカウントが同時に実行するリクエスト数です',
+  'settings.capacitySummary': '{accounts} 個のアカウントで最大 {requests} 件を同時に処理',
+  'settings.accountOrderDrag': '{account} をドラッグして並べ替え',
+  'settings.accountOrderRemove': '{account} を削除',
+  'settings.accountOrderAdd': '優先アカウントを追加',
+  'settings.accountOrderClear': '優先アカウントをクリア',
+  'settings.accountOrderUnset': '未指定（アカウント ID 順に使用）',
+  'settings.accountOrderRest': '残りの {count} 個のアカウントは ID 順に続きます',
+  'settings.authPathAdd': 'パスを追加',
+  'settings.authPathBrowse': '参照',
+  'settings.authPathRemove': '{path} を削除',
+  'settings.authPathRow': 'パス {index}',
+  'settings.pathPickerTitle': 'アカウントファイルまたはフォルダを選択',
+  'settings.pathPickerRoots': 'ドライブ一覧',
+  'settings.pathPickerUp': '1 つ上へ',
+  'settings.pathPickerEmpty': 'フォルダまたはアカウント状態ファイルがありません',
+  'settings.pathPickerSelect': 'このフォルダを選択',
+  'settings.legacy': 'レガシー',
+  'settings.buildLegacyNotice':
+    'Build チャネルは上流で停止されています。拒否されたリクエストは既定のチャネルで完了します',
+  'settings.channelRow': '{channel} チャネル',
   'settings.upstreamChannelsHelp':
     '既定は Playground。Build は旧チャネルで上流の生成は停止済み。オン時、拒否されたリクエストは Playground で完了',
   'settings.modelMapping': 'モデルのマッピング',
@@ -328,6 +370,10 @@ export const messages: Record<TranslationKey, string> = {
   'channel.assistant': 'Build チャット',
   'logs.channel': 'チャネル',
   'models.channels': 'チャネル',
+  'models.accounts': '利用アカウント',
+  'models.accountsHelp':
+    '自動選択ではこれらのアカウントのみを使用します。未選択の場合はすべてのアカウントを使用します',
+  'models.accountsSaved': 'アカウントを保存し、すぐに反映しました',
   'models.channelAll': 'すべてのチャネル',
   'models.channelSaved': 'チャネルを保存し、すぐに反映しました',
   'settings.activeValue': '適用中の値',
@@ -536,7 +582,13 @@ export const messages: Record<TranslationKey, string> = {
   'pg.harassment': '嫌がらせ',
   'pg.hate': 'ヘイト',
   'pg.high': '高',
-  'pg.insertMedia': '画像、動画、音声、ファイルを挿入',
+  'pg.insertMedia': '{types}を挿入',
+  'pg.mediaImages': '画像',
+  'pg.mediaVideos': '動画',
+  'pg.mediaAudio': '音声',
+  'pg.mediaFiles': 'ファイル',
+  'pg.filesystemTools': 'ファイルシステム ツール',
+  'pg.filesystemToolsTip': 'このエージェントではファイルシステム ツールが常に有効です',
   'pg.inlineAttachment': '入力欄のテキストに戻す',
   'pg.knowledgeCutoff': '知識のカットオフ:',
   'pg.learnMore': '詳細',
@@ -959,6 +1011,27 @@ export const messages: Record<TranslationKey, string> = {
     '上限に達すると API の使用が一時停止します。トークンの上限はいつでも引き上げられます。',
   'pg.tokenCapLabel': 'セッションあたりのトークン上限',
   'pg.removeAttachment': '添付ファイルを削除',
+  'pg.videoSettings': '動画の設定',
+  'pg.editVideoOptions': '動画オプションを編集',
+  'pg.agenticVideo': 'エージェント型の動画理解',
+  'pg.agenticVideoTip': 'アップロードした動画をモデルがインタラクティブに分析できるようにします',
+  'pg.agenticVideoUnsupported':
+    '選択したモデルはエージェント型の動画理解に対応していません。切り替えをオフにするか、対応しているモデルに切り替えてください。',
+  'pg.videoStart': '開始時間（例: 1m10s）',
+  'pg.videoEnd': '終了時間（例: 2m30s）',
+  'pg.videoFps': 'FPS（1 秒あたりのフレーム数）',
+  'pg.videoFpsPlaceholder': 'デフォルトは 1 FPS',
+  'pg.videoStartFormat':
+    '開始時間の形式が無効です。時間、分、秒で指定してください（例: 「1h1m10s」、「70s」）。',
+  'pg.videoEndFormat':
+    '終了時間の形式が無効です。時間、分、秒で指定してください（例: 「1h1m10s」、「70s」）。',
+  'pg.videoEndAfterStart': '終了時間は開始時間より後にしてください。',
+  'pg.videoStartRange': '開始時間は動画の長さの範囲内（0～{seconds} 秒）にしてください。',
+  'pg.videoEndRange': '終了時間は動画の長さの範囲内（1～{seconds} 秒）にしてください。',
+  'pg.videoFpsRange': 'FPS は 24 以下の正の数にしてください。',
+  'pg.videoFile': '動画ファイル',
+  'pg.videoName': '名前（省略可）',
+  'pg.videoNamePlaceholder': '名前を入力',
   'pg.removeStop': '停止シーケンスを削除',
   'pg.removeTool': '{tool}を削除',
   'pg.rerun': 'このターンを再実行',
@@ -1132,6 +1205,67 @@ export const messages: Record<TranslationKey, string> = {
   'pg.fileThumbnail': 'ファイルのサムネイル',
   'pg.sampleMedia': 'サンプルメディア',
   'pg.sampleImageFailed': 'サンプル画像をダウンロードできませんでした：{detail}',
+  'pg.uploadFailed': 'Drive へのファイルのアップロードに失敗しました：{detail}',
+  'pg.environment': '環境',
+  'pg.toggleEnvironment': '環境設定を展開または折りたたむ',
+  'pg.environmentDescription':
+    '実行のたびに、エージェントがコードを実行してファイルを管理できる分離された環境が起動します。',
+  'pg.environmentType': 'タイプ',
+  'pg.environmentTypeTip': '使用する環境のタイプ',
+  'pg.environmentMode': '環境モード',
+  'pg.environmentNew': '新規',
+  'pg.environmentExisting': '既存',
+  'pg.environmentId': 'ID',
+  'pg.environmentIdTip': '使用する既存の環境の ID',
+  'pg.environmentIdLabel': '環境 ID',
+  'pg.environmentIdPlaceholder': '環境 ID を入力',
+  'pg.downloadNeedsId': 'ダウンロードするには環境 ID を入力してください',
+  'pg.apiKeyNotFound': 'API キーが見つかりません。',
+  'pg.switchEnvironmentTitle': '新しい環境に切り替えますか？',
+  'pg.switchEnvironmentBody':
+    '環境を「新規」に設定したまま続けると、次の会話のターンで新しい環境が作成されます。',
+  'pg.stayExistingEnvironment': '既存の環境のままにする',
+  'pg.confirm': '確認',
+  'pg.environmentSources': 'ソース',
+  'pg.sourcesTip': '環境にマウントするソース',
+  'pg.addSources': 'ソースを追加',
+  'pg.viewSources': 'ソースを表示',
+  'pg.viewRules': 'ルールを表示',
+  'pg.oneSource': '1 個のソース',
+  'pg.sourceCount': '{count} 個のソース',
+  'pg.environmentNetwork': 'ネットワーク',
+  'pg.networkTip': '環境のネットワーク構成',
+  'pg.addRules': 'ルールを追加',
+  'pg.oneRule': '1 件のルール',
+  'pg.ruleCount': '{count} 件のルール',
+  'pg.addSource': 'ソースを追加',
+  'pg.addNewSource': '新しいソースを追加',
+  'pg.noSourceYet': 'ソースはまだ追加されていません',
+  'pg.inlineFile': 'インライン ファイル',
+  'pg.gcsBucket': 'GCS バケット',
+  'pg.repository': 'リポジトリ',
+  'pg.mountingPath': 'マウントパス',
+  'pg.deleteFile': 'ファイルを削除',
+  'pg.fileContent': 'ファイルの内容',
+  'pg.cloudStorageUri': 'Cloud Storage URI',
+  'pg.repoUri': 'リポジトリ URI',
+  'pg.sourceUrlPlaceholder': 'ソース URL（例: {example}）',
+  'pg.networkTitle': 'ネットワーク構成',
+  'pg.networkDescription':
+    'AI Studio では VM 内のネットワーク リクエストが許可リストで制御されます。VM がアクセスできるのは、以下に記載されたドメインのみです。',
+  'pg.addToAllowlist': '許可リストに追加',
+  'pg.domain': 'ドメイン',
+  'pg.domainPlaceholder': 'ドメイン（例: github.com、*.googleapis.com）',
+  'pg.deleteRule': 'ルールを削除',
+  'pg.addHttpHeader': 'HTTP ヘッダーを追加',
+  'pg.headerName': 'ヘッダー名',
+  'pg.headerValue': 'ここに入力',
+  'pg.deleteHeader': 'HTTP ヘッダーを削除',
+  'pg.seeLess': '表示を減らす',
+  'pg.toggleDisclaimer': '免責事項の表示を切り替え',
+  'pg.seeDisclaimer': '免責事項を表示',
+  'pg.allowlistWarning':
+    '許可リストに新しいドメインを追加する際はご注意ください。エージェントがそれらのサービスにアクセスできるようになります。認証情報を含めると、エージェントが認証を行ってお客様に代わって操作し、意図しない操作を行う可能性があります',
   'pg.sampleVideos': '動画',
   'pg.sampleAnimal': '動物',
   'pg.sampleArchitecture': '建築',
@@ -1226,24 +1360,24 @@ export const messages: Record<TranslationKey, string> = {
     '苔むした枝にぶら下がるかわいいミユビナマケモノを表したアイコン。すっきりした白背景に、カラフルで手ざわり感のあるビニールとフェルトの 3D スタイルで。',
   'zero.flashLite.subtitle':
     '超低レイテンシでコスト効率の高いインテリジェンス。大量のデータ抽出、分類、即時の UI 生成に。',
-  'zero.flashLite.starter1': 'サポートチケット 1,000 件を厳密な JSON に分類',
+  'zero.flashLite.starter1': '適切なトーンで文章をオートコンプリート',
   'zero.flashLite.starter1Prompt':
-    '顧客サポートのメッセージを緊急度、製品領域、感情で分類するための、簡潔でトークン消費の少ないシステムプロンプトと JSON スキーマを設計して。',
-  'zero.flashLite.starter2': '依存ゼロのコマンドパレットを作る',
+    '文の続きをそのまま補完して。続く 3〜6 語だけを出力し、フォーマルなビジネス文書のトーンに合わせ、フレーズが終わったらすぐに止めて。\n\n「四半期レビュー会議を受けて、貴部門の予算配分を検討した結果、」',
+  'zero.flashLite.starter2': '複雑な概念をすばやく説明',
   'zero.flashLite.starter2Prompt':
-    'ファジー検索、ショートカットのバッジ、即時の結果表示を備えた、キーボード操作中心のコマンドパレットを素の HTML、CSS、JS で作って。',
-  'zero.flashLite.starter3': '乱雑な商品属性を NDJSON に正規化',
+    '「ブラックホール」とは何かを、10 歳の子どもでもわかるように 3 文で説明して。',
+  'zero.flashLite.starter3': 'レシートのテキスト抽出',
   'zero.flashLite.starter3Prompt':
-    '構造化されていない EC の商品説明を、単位・色・寸法の表記をそろえた正規化済みの改行区切り JSON（NDJSON）に変換して。',
-  'zero.flashLite.example1': 'Playglow ピクセルアーケード',
+    'レシートのテキストから購入内容を抽出して。指定した JSON スキーマに正確に従い、Markdown のコードフェンスや会話的な前置きは含めないで。\n\nスキーマ：\n{\n  "vendor": string,\n  "date": "YYYY-MM-DD",\n  "currency": string,\n  "items": [{"name": string, "quantity": integer, "total_price": float}],\n  "subtotal": float,\n  "tax": float,\n  "total": float\n}\n\nレシートのテキスト：\nBLUE BOTTLE COFFEE #104\n03/14/2025  09:12 AM\n1x Hayes Valley Espresso    $4.50\n2x Almond Croissant         $9.50\nSubtotal: $14.00\nTax (8.875%): $1.24\nTotal: $15.24\nVISA ENDING IN 8831',
+  'zero.flashLite.example1': '空間コンセプトキャンバス',
   'zero.flashLite.example1Prompt':
-    '4 つの楽しい質問に答えると、あなた専用にデザインされた 3D アーケード筐体で、自分だけのピクセルアートゲームを遊べるようにして。',
-  'zero.flashLite.example2': '靴箱のレシートを JSON に',
+    '無限に広がるグリッドでアイデアを探索し、どのセルをクリックしても、その概念が関連するサブトピックへリアルタイムに展開されるようにして。',
+  'zero.flashLite.example2': 'インタラクティブなビジュアル辞書',
   'zero.flashLite.example2Prompt':
-    'くしゃくしゃのレシートの山を放り込むだけで、店名、明細、税額、合計をすべて抽出し、整った構造化 JSON と CSV にまとめて。',
-  'zero.flashLite.example3': 'Fresnel コード監査',
+    'インタラクティブなシーンを探索しながら、物の名前を翻訳し、発音を聞き、新しい言語の語彙を練習できるようにして。',
+  'zero.flashLite.example3': '音声からビジュアルムードボードへ',
   'zero.flashLite.example3Prompt':
-    'ウェブページとソースファイルを、パフォーマンス、アクセシビリティ、構造の観点で監査し、改善点を即座にビジュアルで示して。',
+    'アイデアを声に出して話すだけで、ビジュアルムードボードのカードをリアルタイムに生成、配置、調整できるようにして。',
   'zero.flash.subtitle':
     '高速でフロンティア級のマルチモーダルインテリジェンス。応答性の高いアプリや高スループットのワークフローに。',
   'zero.flash.starter1': '手描きのスケッチを動く UI に',
@@ -1255,15 +1389,53 @@ export const messages: Record<TranslationKey, string> = {
   'zero.flash.starter3': 'フライトと天候の最新の乱れを比較',
   'zero.flash.starter3Prompt':
     '現在の主要空港の遅延と悪天候の警報を検索し、影響の大きい路線を構造化した表にまとめて。',
-  'zero.flash.example1': 'ネオンスネーク 3D',
+  'zero.flash.example1': '金融リサーチエージェント',
   'zero.flash.example1Prompt':
-    'なめらかな軌跡のパーティクル、光る収集オーブ、リアルタイムのリーダーボードを備えた、テンポの速いネオングリッドのスネークゲームを作って。',
-  'zero.flash.example2': 'Lumina シェーダースタジオ',
+    'SEC の提出書類を収集し、推論のタイムラインを処理して、インタラクティブな株式分析レポートを生成する自律型の金融リサーチエージェント。',
+  'zero.flash.example2': 'インタラクティブな年次報告書',
   'zero.flash.example2Prompt':
-    'ステージのラインナップのアニメーション、アーティストの試聴、カスタムスケジュール作成機能を備えた、インタラクティブなフェスガイドをデザインして。',
-  'zero.flash.example3': 'マップスタイリスト',
+    'The Urban Hive Project のインタラクティブな 2026 年次インパクトレポート。生物多様性の定量データ、ロンドン各地に広がる屋上養蜂場、地域コミュニティの定性的なストーリーを、なめらかなスプリングアニメーションとエディトリアルデザインで紹介。',
+  'zero.flash.example3': '恐竜化石エクスプローラー',
   'zero.flash.example3Prompt':
-    'ムードの説明からカスタムのカラーパレットとランドマークのテーマを生成する、インタラクティブな地図スタイリングツールを作って。',
+    'Gemini を使って恐竜の化石を生きた姿の復元図や詳細な解剖図に変える、インタラクティブな古生物学フィールドジャーナル。',
+  'zero.omni12.subtitle':
+    'テキスト、画像、動画から、ネイティブ音声付きの最長 15 秒の動画を生成・編集。キャラクターや被写体の一貫性がさらに向上。',
+  'zero.omni12.starter1': '突撃する騎士を Snorricam で捉える',
+  'zero.omni12.starter1Prompt':
+    'Snorricam ショット：雨に濡れた戦場を突撃する中世の騎士。体に装着したリグが、泥の跳ねた彼の顔をしっかり捉える。顔はフレームの中央に固定されたまま、旗、盾、嵐の雲が一歩ごとに大きく揺れる。音声：彼の足音、鎧のぶつかる音、雨音のみ。カメラリグは映さない。',
+  'zero.omni12.starter2': '漂流者から島全体へクラッシュズームアウト',
+  'zero.omni12.starter2Prompt':
+    '途切れない 1 ショット：流木のそばの濡れた砂浜にひざまずく漂流者のクローズアップから始め、高速でクラッシュズームアウトして、火山の断崖と紺碧の海に囲まれた広大なジャングルの島の岸辺で、彼が小さな点になるまで引く。音声：打ち寄せる波の音と、そよ風に揺れるヤシの葉のざわめき。',
+  'zero.omni12.starter3': 'ティルトダウンして話すアーキビストへドリーイン',
+  'zero.omni12.starter3Prompt':
+    'カットなしのワンショット：広大なアーカイブのロタンダにある日差しの降り注ぐドームからティルトダウンし、大理石の床を横切って素早くドリーインして、サフラン色のケープをまとったアーキビストのクローズアップへ。彼女は青銅の円筒をコンソールに差し込み、落ち着いた声で言う。「外縁州の国勢調査記録は、三世紀にわたって封印されています。」',
+  'zero.omni12.example1': 'ラーメン屋のジオラマ、最初から最後のフレームまで',
+  'zero.omni12.example1Prompt':
+    'アイソメトリックな東京の街角のラーメン屋のジオラマを最初のフレーム、店内を最後のフレームにして。途切れないひと続きのカメラプッシュで歩道へ急降下し、のれんのすぐ下をくぐって活気あるカウンターへ入り込むと、料理人が湯気の立つどんぶりを差し出し、客が麺をすする瞬間で着地する。ミニチュアジオラマのスタイルとキャラクターの同一性は保ったままで。',
+  'zero.omni12.example2': '4 キャラクターの温室シーン',
+  'zero.omni12.example2Prompt':
+    '霧に包まれたヴィクトリア朝のガラス温室の中にある素朴なポッティングベンチを捉えた、固定カメラによる映画的で受賞作品級の 3D アニメーションスタイルのショット（[location_style_image_0]。ロケーションのデザイン、スケール、構造は参考画像 [location_style_image_0] と一致させ、すべてのキャラクターが [location_style_image_0] の環境に違和感なく自然に溶け込むようにする）。音響は湿度が高く緑豊かなガラスと鉄の温室らしく、曇ったガラス窓から柔らかくきらめく残響が返り、大きなシダの葉に水滴が静かに落ちる。シーンに登場するのは厳密にこの 4 体の動物キャラクターのみで、[location_style_image_1] に示された相対的な身長比を正確に保つ。どのキャラクターも話すときや笑うときは、口のデザインと構造を口元のクローズアップ参考画像と一致させる。ベンチに座っているのは、キャラクター 0 の、光る花を抱えた半透明のピンクのゼリー状の生き物 Pip（[character_0_image_0]、[character_0_image_1]、[character_0_image_2]）と、キャラクター 1 の、パステルレインボーのカメレオン Cosmo（[character_1_image_0]、[character_1_image_1]、[character_1_image_2]）。ベンチの横に立っているのは、キャラクター 2 の、砂色がかった茶色の鎧をまとったセンザンコウ Arthur（[character_2_image_0]、[character_2_image_1]、[character_2_image_2]）と、キャラクター 3 の、ネイビーの花柄バンダナを巻いたカピバラ Mateo（[character_3_image_0]、[character_3_image_1]、[character_3_image_2]）。話者のリップシンクと 2 段階のセリフのタイミングを厳守する。[0.5s–3.9s] キャラクター 1（パステルレインボーのカメレオン Cosmo。[character_1_image_1] の繊細な口のデザインを見せる）だけが口を動かし、隣の鮮やかなピンクの蘭を横目で見ながらまぶたを細め、生意気で派手、芝居がかった批評家の声で、音程を大げさに上下させつつ、一語も落とさずはっきりと言い放つ。「ちょっと失礼、あの蘭、ボクのカラーパレットをパクってるじゃないか！ロイヤリティを要求する！」[4.1s–7.2s] キャラクター 0（半透明のピンクのゼリー状の生き物 Pip。[character_0_image_1] の繊細な口のデザインを見せる）だけが、ふんわりと無邪気で弾むような妖精の声でくすくす笑い、7.2s までにきれいに言い終える。「きっと Cosmo のしっぽとおそろいにしたいだけだよ！」[7.2s–8.2s] 温室の中で一瞬、無言のリアクションの間。[8.3s–11.0s] キャラクター 2（鎧をまとったセンザンコウ Arthur。[character_2_image_1] の繊細な口のデザインを見せ、その間 Cosmo は黙っている）だけが、両手の爪を組み合わせ、恥ずかしがり屋でとても礼儀正しい学者風のテノールでつぶやく。「厳密に言えば、それは先週の火曜日にここで咲いたんですけど……」[11.2s–13.3s] キャラクター 3（ネイビーの花柄バンダナを巻いたカピバラ Mateo。[character_3_image_1] の繊細な口のデザインを見せる）だけが、低く穏やかで悟りきったバリトンで、ゆっくりと至福のため息をつく。「まあまあ、植物とケンカすんなって。」[13.3s–14.9s] 静かで穏やかなリアクションをそのまま保ち、14.9s 以降はセリフを一切入れない。ショット全体を通して、提供されたすべての参考画像と細部を 100% 1:1 で忠実に再現すること。各キャラクターの顔の特徴、目の大きさ、口のデザイン、衣装と体の形状、色、プロポーション、相対的なスケールの並び（[location_style_image_1]）、環境のレイアウト（[location_style_image_0]）は参考画像と 100% 一致させ、見た目のずれや変更を一切生じさせない。',
+  'zero.omni12.example3': 'ライブ注釈付きのミツバチの巣の科学解説',
+  'zero.omni12.example3Prompt':
+    '画像 1 の生きたミツバチの巣の内部を舞台に、4 つのショットをハードカットでつないだ 15 秒の科学解説。',
+  'zero.omni.subtitle':
+    'テキスト、画像、動画の参照をリアルタイムに生き生きと形にする、インターリーブ型のマルチモーダル生成。',
+  'zero.omni.starter1': '波のバレルを抜けるサーファーを追う',
+  'zero.omni.starter1Prompt':
+    'この画像を最初のフレームにして。波のバレルを抜けていくサーファーを、自然なしぶきと水を透過する日差しとともに、映画のようなワンカットで追いかけて。',
+  'zero.omni.starter2': '4 ショットの深海ストーリーボードとアニマティックを演出',
+  'zero.omni.starter2Prompt':
+    'この深海潜水艇のフレームから始めて、生物発光する沈んだ大聖堂を発見する 4 ショットのシーケンスを演出して。ワイドな降下、コックピットの投光器による全貌の披露、珊瑚が目覚めるマクロ、ゆっくりとしたドリーバック。',
+  'zero.omni.starter3': 'ファッションフィルムをスローモーションで回り込み撮影',
+  'zero.omni.starter3Prompt':
+    'この画像をファッションフィルムの最初のフレームにして。刺繍入りの深紅の生地が穏やかな海風に揺れるなか、被写体の周りをゆっくり回り込んで。',
+  'zero.omni.example1': '生物発光するインクのジオラマ',
+  'zero.omni.example1Prompt':
+    '1000fps の超スローモーションのマクロ映像。ミッドナイトブルーと金色のインクが一滴、ゴールデンアワーの太陽に逆光で照らされたクリスタルガラスのボウルに落ち、半透明のベタと光る蓮の花へと広がっていく。',
+  'zero.omni.example2': '雨のネオン東京のトラッキングショット',
+  'zero.omni.example2Prompt':
+    'ブルーアワーに雨で濡れた東京の路地を滑るように進む、ローアングルの 35mm アナモルフィックによるドリーショット。居酒屋の温かみのある赤い提灯とシアンのネオンの漢字が、波紋の広がる水たまりに映り込む。',
+  'zero.builtBy': '{model} で構築',
   'zero.pro.subtitle':
     '深い推論、長いコンテキストの統合、本番レベルのソフトウェアエンジニアリング。',
   'zero.pro.starter1': 'WebGL2 で水による侵食のシミュレーターを作る',
@@ -1506,27 +1678,19 @@ export const messages: Record<TranslationKey, string> = {
   'nav.usage': '使用量',
   'common.undo': '元に戻す',
   'accounts.deletedNamed': 'アカウント {name} を削除しました',
+  'accounts.deletedCount': '{count} 件のアカウントを削除しました',
   'logs.body': 'リクエストとレスポンスの本文',
   'logs.requestBody': 'リクエスト本文',
   'logs.responseBody': 'レスポンス本文',
   'logs.bodyMissing':
     '本文は保存されていません。設定で「リクエスト本文を保存」をオンにしてください',
   'settings.section.service': 'サービス',
-  'settings.section.serviceHelp':
-    '生成サービスの起動方法、待ち受けアドレス、アカウント ファイルの場所',
   'settings.section.capacity': '容量',
-  'settings.section.capacityHelp': 'Worker の数、コールド スタートの同時数、アカウントの振り分け',
-  'settings.section.upstream': '上流',
-  'settings.section.upstreamHelp': '上流チャネル、WAA の実行方法、タイムアウト',
   'settings.section.network': 'ネットワーク',
-  'settings.section.networkHelp':
-    'ログイン、インポート、アカウントのリクエストで使うデフォルトの接続経路',
   'settings.section.security': 'セキュリティとログ',
-  'settings.section.securityHelp': 'コンソールのログイン、リクエスト本文の記録、ログファイル',
   'settings.effect.immediate': '保存するとすぐに反映',
   'settings.effect.service': '生成サービスの再起動後に反映',
   'settings.effect.management': 'アプリの再起動後に反映',
-  'settings.unsavedField': '未保存',
   'settings.unsavedSection': 'このセクションには未保存の変更があります',
   'settings.unsavedBar': '未保存の変更',
   'settings.unsavedCount': '未保存の変更が {count} 件あります',
@@ -1535,6 +1699,9 @@ export const messages: Record<TranslationKey, string> = {
   'settings.discard': '変更を破棄',
   'settings.autoStart': '生成サービスを自動的に開始',
   'settings.autoStartHelp': '管理プログラムの起動直後に生成サービスを開始します。',
+  'settings.hideDockIcon': 'Dock アイコンを非表示',
+  'settings.hideDockIconHelp':
+    'アイコンをメニューバーにのみ表示します。ウインドウを閉じてもサービスは動き続け、メニューバーまたは「アプリケーション」から再び開けます。',
   'settings.listenHelp': 'コンソールと公開 API が共用する待ち受けアドレスです。',
   'settings.previewListenHelp':
     'API プレイグラウンドの HTML プレビュー用オリジン。現在のホスト名とこのポートで開きます。',
@@ -1564,11 +1731,6 @@ export const messages: Record<TranslationKey, string> = {
   'settings.keyRemove': 'キー {key} を削除',
   'settings.keyDuplicate': 'キー {key} はすでに一覧にあるため、追加していません',
   'settings.authPathHelp': 'アカウントのファイル、ディレクトリ、またはカンマ区切りの複数のパス。',
-  'settings.warmWorkerLimitHelp':
-    '生成サービスの起動後にウォームアップしたまま常駐させるアカウントの数。',
-  'settings.maxActiveWorkersHelp': 'ピーク時に同時実行する Worker の上限',
-  'settings.warmStartupConcurrencyHelp': '同時にコールド スタートする Camoufox Worker 数',
-  'settings.perAccountConcurrencyHelp': '1 つのアカウントで同時に実行するリクエストの数。',
   'settings.buildNativeHelp':
     '非ストリーミング リクエストは Build を優先し、使えない場合は Playground を使用',
   'settings.nonstreamKeepaliveHelp':
@@ -1790,8 +1952,6 @@ export const messages: Record<TranslationKey, string> = {
   'theme.dark': 'ダーク',
   'nav.access': '接続',
   'section.access.title': '接続ガイド',
-  'section.access.description':
-    'サービスの URL とキー、クライアントの設定、機能ごとのサンプルコード、すべてのエンドポイント',
   'access.nav.start': 'クイックスタート',
   'access.nav.clients': 'クライアント',
   'access.nav.capabilities': '機能とサンプル',
@@ -1842,6 +2002,7 @@ export const messages: Record<TranslationKey, string> = {
   'access.tierHaiku': 'Haiku 用モデル',
   'access.importCCSwitch': 'CC Switch にインポート',
   'access.importCherry': 'Cherry Studio にインポート',
+  'access.importMagpie': 'Magpie にインポート',
   'access.importHelp':
     'このコンピュータにアプリがインストールされている必要があります。アプリ側でインポートを確認してください',
   'access.dockerNote':
@@ -1850,37 +2011,36 @@ export const messages: Record<TranslationKey, string> = {
     'Anthropic のターミナル向けコーディングエージェント。Anthropic Messages で接続し、Opus・Sonnet・Haiku の各ティアに別々のモデルを指定できます',
   'access.client.codex':
     'OpenAI のターミナル向けコーディングエージェント。OpenAI Responses で接続します',
-  'access.client.geminiCli': 'Google のターミナル向けエージェント。Gemini API で接続します',
   'access.client.opencode':
-    'オープンソースのターミナル向けコーディングエージェント。OpenAI 互換プロバイダーとして接続し、設定にすべてのチャットモデルを列挙します',
+    'オープンソースのターミナル向けコーディングエージェント。設定にすべてのチャットモデルを列挙します',
   'access.client.openclaw':
-    'オープンソースのパーソナルアシスタントエージェント。OpenAI 互換プロバイダーとして接続します',
-  'access.client.hermes':
-    'Nous Research のオープンソースエージェント。カスタムプロバイダーとして接続します',
+    'オープンソースのパーソナルアシスタントエージェント。設定ファイルにカスタムプロバイダーを追加します',
+  'access.client.magpie':
+    'モデル切替ゲートウェイ。このサービスのモデルを Claude Code、Codex などのエージェントから使えるようにします',
   'access.client.pi':
     'オープンソースのターミナル向けコーディングエージェント。models.json にカスタムプロバイダーを追加します',
-  'access.client.omp':
-    'pi の拡張版。チャットは OpenAI 互換 API、ウェブ検索は Gemini API を使います',
+  'access.client.omp': 'pi の拡張版。ウェブ検索は Gemini API を使います',
   'access.client.dsh':
-    'DeepSeek のターミナル向けエージェント。パッチファイルで OpenAI 互換プロバイダーを追加します',
+    'DeepSeek のターミナル向けエージェント。パッチファイルでカスタムプロバイダーを追加します',
   'access.client.cherry':
     'デスクトップ AI クライアント。OpenAI、Gemini、Anthropic のいずれかのタイプでプロバイダーを追加します',
   'access.client.sillytavern':
-    'ロールプレイ向けチャットフロントエンド。Google AI Studio ソースにリバースプロキシを設定します',
+    'ロールプレイ向けチャットフロントエンド。チャット補完ソースにリバースプロキシを設定します',
   'access.client.openWebui': 'セルフホスト型のウェブチャット UI。OpenAI 互換の接続を追加します',
   'access.client.lobechat':
-    'オープンソースのチャットアプリ。Google プロバイダーにプロキシアドレスを設定します',
-  'access.client.newApi': 'API ゲートウェイ兼配信システム。Gemini チャネルを追加します',
+    'オープンソースのチャットアプリ。対応するプロバイダーにプロキシアドレスを設定します',
+  'access.client.newApi':
+    'API ゲートウェイ兼配信システム。選択したプロトコルのチャネルを追加します',
   'access.step.envRun': 'ターミナルで環境変数を設定して {name} を起動します',
-  'access.step.geminiAuth':
-    '{name} の設定ファイルに次の内容を追加し、Gemini API キー認証を選びます',
   'access.step.settingsFile':
     'または設定ファイルに次の内容を追加すれば、以後はそのまま {name} を起動できます',
   'access.step.configFile': '{name} の設定ファイルに次の内容を追加します',
   'access.step.keyRun': 'ターミナルでキーの環境変数を設定して {name} を起動します',
-  'access.step.envFile': 'または .env ファイルに書き込めば、以後はそのまま {name} を起動できます',
   'access.step.ompSearch': 'config.yml でウェブ検索のロールを Gemini プロバイダーに割り当てます',
   'access.step.patchFile': '次の内容をパッチファイルとして保存します',
+  'access.step.magpieImport': 'またはターミナルで次のコマンドを実行してインポートします',
+  'access.step.magpieManual':
+    '手動で追加する場合は {name} の Providers で Add provider から Custom provider を選び、次の項目を入力します',
   'access.step.cherry':
     '「設定 → モデルプロバイダー」でプロバイダーを追加して次の項目を入力し、モデル一覧から使うモデルを追加します',
   'access.step.sillytavern': '「API接続」パネルで次の項目を選択・入力し、「接続」をクリックします',
@@ -1888,7 +2048,7 @@ export const messages: Record<TranslationKey, string> = {
     '「管理者パネル → 設定 → 接続」で OpenAI API に接続を追加し、次の項目を入力します',
   'access.step.dockerEnv': 'Docker でデプロイする場合は環境変数でも設定できます',
   'access.step.lobechat':
-    '「設定 → AIサービスプロバイダー → Google」で次の項目を入力し、プロバイダーを有効にします',
+    '「設定 → AIサービスプロバイダー」で下記のプロバイダーを開き、項目を入力して有効にします',
   'access.step.newApi':
     '「チャネル」で「チャネルを作成」をクリックし、プロバイダーを選んで次の項目を入力します',
   'access.field.cherryType': 'プロバイダータイプ',
@@ -1898,10 +2058,14 @@ export const messages: Record<TranslationKey, string> = {
   'access.field.stSource': 'チャット補完ソース',
   'access.field.stUrl': 'プロキシサーバー URL',
   'access.field.stPassword': 'プロキシパスワード',
-  'access.field.stModel': 'Google モデル',
+  'access.field.stModel': 'モデル',
   'access.field.webuiKey': 'キー',
   'access.field.lobeKey': 'API キー',
   'access.field.lobeUrl': 'API プロキシアドレス',
+  'access.field.lobeResponses': 'Responses API 規格の使用',
+  'access.field.lobeOn': 'オン',
+  'access.field.webuiApiType': 'APIの種類',
+  'access.field.webuiResponses': '応答',
   'access.field.newapiProvider': 'プロバイダ',
   'access.field.newapiUrl': 'ベースURL',
   'access.field.newapiKey': 'APIキー',

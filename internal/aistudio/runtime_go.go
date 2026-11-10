@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/camoufoxnative"
+	appconfig "github.com/Mag1cFall/AIStudio2API/internal/config"
 	"github.com/Mag1cFall/AIStudio2API/internal/waa"
 )
 
@@ -41,6 +42,8 @@ type workerRuntime interface {
 	PageCatalog() camoufoxnative.PageCatalog
 	SendProtected(context.Context, string, http.Header, []byte) (*camoufoxnative.ProtectedResponse, error)
 	StorageCookies(context.Context) ([]byte, error)
+	// MergeSetCookieHeaders 把账户在页面之外取得的响应 Cookie 写入页面
+	MergeSetCookieHeaders(context.Context, []string, string) error
 	State() camoufoxnative.State
 	// Reload 按官网冷启动重新载入页面，返回新页面就绪后使用的 runtime
 	Reload(context.Context) (workerRuntime, error)
@@ -85,11 +88,15 @@ type pageRPC struct {
 	body   string
 }
 
-// pageStartupRPCs 是官网页面启动时与 GetLoggingContext、Waa/Create 并发发出的请求
-var pageStartupRPCs = []pageRPC{
-	{"GetUserPreferences", "[]"},
+// pageCatalogStartupRPCs 是官网页面启动请求中的权益与模型目录请求，Worker 就绪前需要它们的正文
+var pageCatalogStartupRPCs = []pageRPC{
 	{"GetAiStudioBenefitTier", "[]"},
 	{"ListModels", "[]"},
+}
+
+// pageStartupRPCs 是官网页面启动时与权益和模型目录请求、GetLoggingContext、Waa/Create 并发发出的其余请求
+var pageStartupRPCs = []pageRPC{
+	{"GetUserPreferences", "[]"},
 	{"GenerateAccessToken", `["users/me"]`},
 	incidentsRPC,
 	{"ListPromos", "[]"},
@@ -241,7 +248,7 @@ func (runtime *goWAARuntime) open(ctx context.Context, fingerprint map[string]an
 			runtime.profile.LocalStorage[item.Name] = item.Value
 		}
 	}
-	runtime.cacheDirectory = filepath.Join(filepath.Dir(filepath.Dir(options.StorageStatePath)), ".waa-interpreters")
+	runtime.cacheDirectory = filepath.Join(filepath.Dir(filepath.Dir(options.StorageStatePath)), appconfig.WAAInterpreterCacheName)
 	reportGoStartup(options, camoufoxnative.StartupLoadingAIStudio)
 	apiKey, document, err := runtime.loadPage(ctx)
 	if err != nil {
@@ -267,25 +274,44 @@ func (runtime *goWAARuntime) open(ctx context.Context, fingerprint map[string]an
 		extension, body, err := runtime.loggingContextHeader(ctx, apiKey, visitID)
 		loggingDone <- loggingContext{extension, body, err}
 	}()
-	pageDone := make(chan [][]byte, 1)
+	catalogDone := make(chan [][]byte, 1)
 	pageStarted := time.Now()
 	go func() {
-		pageDone <- runtime.sendPageRPCs(ctx, apiKey, visitID, "", pageStartupRPCs)
+		catalogDone <- runtime.sendPageRPCs(ctx, apiKey, visitID, "", pageCatalogStartupRPCs)
 	}()
+	startupDone := make(chan struct{})
+	go func() {
+		runtime.sendPageRPCs(context.WithoutCancel(ctx), apiKey, visitID, "", pageStartupRPCs)
+		close(startupDone)
+	}()
+	type startedVM struct {
+		vm  *waa.Runtime
+		err error
+	}
+	vmDone := make(chan startedVM, 1)
 	challenge, err := runtime.createChallenge(ctx, nil)
+	if err == nil {
+		go func() {
+			vm, err := runtime.startVM(ctx, challenge)
+			vmDone <- startedVM{vm, err}
+		}()
+	}
 	logging := <-loggingDone
-	startup := <-pageDone
+	catalog := <-catalogDone
 	if err != nil {
 		return err
 	}
 	if logging.err != nil {
+		if started := <-vmDone; started.vm != nil {
+			started.vm.Close()
+		}
 		return logging.err
 	}
 	extension := logging.extension
 	runtime.pageCatalog = camoufoxnative.PageCatalog{
 		Logging: logging.body,
-		Tier:    pageStartupBody(startup, "GetAiStudioBenefitTier"),
-		Models:  pageStartupBody(startup, "ListModels"),
+		Tier:    catalog[0],
+		Models:  catalog[1],
 	}
 	runtime.headers = http.Header{}
 	runtime.headers.Set("user-agent", runtime.userAgent)
@@ -297,16 +323,15 @@ func (runtime *goWAARuntime) open(ctx context.Context, fingerprint map[string]an
 		runtime.headers.Set("x-goog-ext-519733851-bin", extension)
 	}
 	reportGoStartup(options, camoufoxnative.StartupBootstrappingWAA)
-	followupDone := make(chan struct{})
 	go func() {
-		runtime.sendFollowupRPCs(ctx, apiKey, visitID, extension, startup)
-		close(followupDone)
+		<-startupDone
+		runtime.sendFollowupRPCs(context.WithoutCancel(ctx), apiKey, visitID, extension, catalog[0])
 	}()
-	vm, err := runtime.startVM(ctx, challenge)
-	<-followupDone
-	if err != nil {
-		return err
+	started := <-vmDone
+	if started.err != nil {
+		return started.err
 	}
+	vm := started.vm
 	if err := vm.Settle(ctx); err != nil {
 		vm.Close()
 		return err
@@ -620,11 +645,6 @@ func (runtime *goWAARuntime) loggingContextHeader(ctx context.Context, apiKey st
 	return base64.StdEncoding.EncodeToString(encoded), body, nil
 }
 
-// pageStartupBody 返回页面启动请求中 method 的 HTTP 200 响应正文，请求失败时为 nil
-func pageStartupBody(startup [][]byte, method string) []byte {
-	return startup[slices.IndexFunc(pageStartupRPCs, func(rpc pageRPC) bool { return rpc.method == method })]
-}
-
 // sendPageRPCs 以官网页面的请求头并发发出页面自身的 MakerSuite 请求，extension 非空时带 X-Goog-Ext-519733851-Bin，按 rpcs 顺序返回各 HTTP 200 响应的正文
 func (runtime *goWAARuntime) sendPageRPCs(ctx context.Context, apiKey string, visitID string, extension string, rpcs []pageRPC) [][]byte {
 	bodies := make([][]byte, len(rpcs))
@@ -646,10 +666,9 @@ func (runtime *goWAARuntime) sendPageRPCs(ctx context.Context, apiKey string, vi
 	return bodies
 }
 
-// sendFollowupRPCs 按启动请求的响应发出官网页面接着发出的请求，带已返回的日志上下文 extension，导航栏条件成立时同时读取 Google Developer Program 权益
-func (runtime *goWAARuntime) sendFollowupRPCs(ctx context.Context, apiKey string, visitID string, extension string, startup [][]byte) {
+// sendFollowupRPCs 发出官网页面在启动请求完成后接着发出的请求，带已返回的日志上下文 extension，权益响应 benefitTier 满足导航栏条件时同时读取 Google Developer Program 权益
+func (runtime *goWAARuntime) sendFollowupRPCs(ctx context.Context, apiKey string, visitID string, extension string, benefitTier []byte) {
 	rpcs := pageFollowupRPCs
-	benefitTier := pageStartupBody(startup, "GetAiStudioBenefitTier")
 	if runtime.pageFlags.requestsGDPProfile(benefitTier) {
 		rpcs = append(slices.Clone(rpcs), gdpProfileRPC)
 	}
@@ -968,6 +987,13 @@ func (runtime *goWAARuntime) StorageCookies(ctx context.Context) ([]byte, error)
 		return nil, err
 	}
 	return json.Marshal(runtime.cookies().Cookies)
+}
+
+// MergeSetCookieHeaders 把账户在页面之外取得的响应 Cookie 写入 runtime 的 Cookie 状态
+func (runtime *goWAARuntime) MergeSetCookieHeaders(_ context.Context, headers []string, requestURL string) error {
+	runtime.session.mu.Lock()
+	defer runtime.session.mu.Unlock()
+	return runtime.session.state.MergeSetCookieHeaders(headers, requestURL, time.Now())
 }
 
 // State 返回 SpiderMonkey runtime 的页面与协议状态

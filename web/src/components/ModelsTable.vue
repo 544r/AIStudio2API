@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { parseAccountBindings } from '@/accountBindings'
 import { api } from '@/api'
 import { channelLabelKey, useI18n } from '@/i18n'
-import type { Model, ServiceConfig, UpstreamChannel } from '@/types'
+import type { Account, Model, ServiceConfig, UpstreamChannel } from '@/types'
 import { useQueryText } from '@/url'
 import DetailDialog from './DetailDialog.vue'
 import DisclosureChevron from './DisclosureChevron.vue'
+import FilterMenu from './FilterMenu.vue'
 import UiCollapse from './UiCollapse.vue'
 import UiIcon from './UiIcon.vue'
 import UiSelect from './UiSelect.vue'
@@ -15,6 +17,7 @@ const props = defineProps<{
   loading: boolean
   error: string
   config: ServiceConfig | null
+  accounts: Account[]
 }>()
 const emit = defineEmits<{
   saved: [config: ServiceConfig]
@@ -28,7 +31,7 @@ const detail = ref<Model | null>(null)
 // codedOpen 是详情中未命名能力码是否展开，打开另一个模型的详情时收起
 const codedOpen = ref(false)
 watch(detail, () => (codedOpen.value = false))
-const savingChannel = ref(false)
+const saving = ref(false)
 
 // modelChannels 与服务端一致解析 MODEL_CHANNELS 为模型到限定通道的映射：模型 ID 去掉 models/ 前缀，通道转为小写
 function modelChannels(value: string): Map<string, string> {
@@ -67,18 +70,58 @@ async function setModelChannel(model: Model, channel: string): Promise<void> {
   const channels = modelChannels(props.config.model_channels)
   if (channel === '') channels.delete(model.id)
   else channels.set(model.id, channel)
-  savingChannel.value = true
+  await saveConfig(
+    { model_channels: [...channels].map(([id, value]) => `${id}:${value}`).join(',') },
+    t('models.channelSaved'),
+  )
+}
+
+// modelAccountBindings 解析 MODEL_ACCOUNTS 为模型到可用账户 ID 的映射
+function modelAccountBindings(value: string): Map<string, string[]> {
+  return new Map(
+    [...parseAccountBindings(value)].map(([model, ids]) => [model.replace(/^models\//, ''), ids]),
+  )
+}
+
+// modelAccounts 返回模型可用的账户 ID，未绑定时为空
+function modelAccounts(model: Model): string[] {
+  return modelAccountBindings(props.config?.model_accounts ?? '').get(model.id) ?? []
+}
+
+// accountLabel 返回账户 ID 对应的显示名称
+function accountLabel(id: string): string {
+  return props.accounts.find((account) => account.id === id)?.label ?? id
+}
+
+// modelAccountsLabel 是模型账户选择按钮的文字：未选时为全部账户，只选一个时为该账户
+function modelAccountsLabel(model: Model): string {
+  const ids = modelAccounts(model)
+  if (ids.length === 0) return t('settings.keyAccountsAll')
+  return ids.length === 1 ? accountLabel(ids[0]!) : t('settings.keyAccountsSome')
+}
+
+// setModelAccounts 保存模型可用的账户，空列表表示可用全部账户
+async function setModelAccounts(model: Model, ids: string[]): Promise<void> {
+  if (props.config === null) return
+  const bindings = modelAccountBindings(props.config.model_accounts)
+  if (ids.length > 0) bindings.set(model.id, ids)
+  else bindings.delete(model.id)
+  await saveConfig(
+    { model_accounts: [...bindings].map(([id, value]) => `${id}:${value.join('|')}`).join(',') },
+    t('models.accountsSaved'),
+  )
+}
+
+// saveConfig 保存模型详情中修改的配置项并提示结果
+async function saveConfig(changes: Partial<ServiceConfig>, savedNotice: string): Promise<void> {
+  saving.value = true
   try {
-    const saved = await api.saveConfig({
-      ...props.config,
-      model_channels: [...channels].map(([id, value]) => `${id}:${value}`).join(','),
-    })
-    emit('saved', saved)
-    emit('notice', t('models.channelSaved'), 'success')
+    emit('saved', await api.saveConfig({ ...props.config!, ...changes }))
+    emit('notice', savedNotice, 'success')
   } catch (error) {
     emit('notice', errorText(error), 'error')
   } finally {
-    savingChannel.value = false
+    saving.value = false
   }
 }
 
@@ -148,25 +191,27 @@ function tokenLimit(value: number | undefined): string {
     class="flex min-h-0 flex-1 flex-col overflow-auto max-md:[scrollbar-gutter:stable] md:overflow-hidden"
   >
     <header
-      class="flex flex-wrap items-center gap-3 border-b border-line px-4 py-4 md:px-[max(2rem,calc((100%_-_var(--container-5xl))/2_+_2rem))]"
+      class="page-x flex flex-wrap items-center gap-3 border-b border-line py-4 md:overflow-hidden md:[scrollbar-gutter:stable]"
     >
       <div class="min-w-0 flex-1">
         <h2 class="text-xl font-semibold text-white">{{ t('section.models.title') }}</h2>
         <p class="mt-1 text-sm text-gray-500">{{ t('section.models.description') }}</p>
       </div>
     </header>
-    <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-8">
-      <div class="mb-4 flex flex-wrap items-center gap-3">
+    <div
+      class="page-x flex min-h-0 flex-1 flex-col py-4 md:overflow-hidden md:py-8 md:[scrollbar-gutter:stable]"
+    >
+      <div class="mb-3 flex flex-wrap items-center gap-2">
         <input
           v-model="query"
-          class="min-w-0 flex-1 basis-full rounded border border-line bg-canvas px-3 py-2 text-sm text-white transition focus:border-blue-500 focus:outline-none sm:min-w-64 sm:basis-0"
+          class="min-w-0 flex-1 basis-full rounded-md border border-line bg-canvas px-3 py-1 text-sm text-white transition focus:border-blue-500 focus:outline-none sm:min-w-64 sm:basis-0"
           :placeholder="t('models.search')"
           type="search"
         />
         <UiSelect
           v-if="!loading"
           v-model="selectedMethod"
-          class="rounded border border-line bg-canvas px-3 py-2 text-sm text-gray-300 focus:border-blue-500 focus:outline-none"
+          class="rounded-md border border-line bg-canvas px-2 py-1.5 text-xs text-gray-200 focus:border-blue-500 focus:outline-none"
           :aria-label="t('models.methods')"
         >
           <option value="">{{ t('models.allMethods') }}</option>
@@ -295,7 +340,7 @@ function tokenLimit(value: number | undefined): string {
                   : 'bg-raised text-gray-400 hover:text-gray-200'
               "
               :aria-pressed="modelChannel(detail) === channel"
-              :disabled="savingChannel"
+              :disabled="saving"
               @click="setModelChannel(detail, channel)"
             >
               {{ channel === '' ? t('models.channelAll') : t(channelLabelKey(channel)) }}
@@ -310,6 +355,21 @@ function tokenLimit(value: number | undefined): string {
               {{ t(channelLabelKey(channel)) }}
             </span>
           </div>
+        </div>
+        <div v-if="config && (accounts.length > 1 || modelAccounts(detail).length > 0)">
+          <span class="mb-2 block text-xs text-gray-500">{{ t('models.accounts') }}</span>
+          <FilterMenu
+            :label="modelAccountsLabel(detail)"
+            :options="accounts.map((account) => account.id)"
+            :selected="modelAccounts(detail)"
+            :format="accountLabel"
+            :search-label="t('settings.accountSearch')"
+            :empty-label="t('settings.accountNone')"
+            :clear-label="t('settings.keyAccountsClear')"
+            :disabled="saving"
+            @change="setModelAccounts(detail!, $event)"
+          />
+          <p class="mt-1.5 text-xs text-gray-500">{{ t('models.accountsHelp') }}</p>
         </div>
         <div>
           <span class="mb-2 block text-xs text-gray-500">{{ t('models.methods') }}</span>

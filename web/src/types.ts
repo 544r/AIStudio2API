@@ -33,6 +33,10 @@ export interface Account {
   message: string
   // pairing_renewed_at 是远程添加的账户最近一次由原电脑续签的时间
   pairing_renewed_at?: string
+  // transition 是账户启停的后台收尾阶段：draining 等待在途请求结束并关闭 Worker，syncing 同步模型目录
+  transition?: 'draining' | 'syncing'
+  // active_requests 是账户上进行中的请求数
+  active_requests: number
 }
 
 interface ProxyPoolEntry {
@@ -163,6 +167,14 @@ export interface UpdateStatus {
   checked_at?: string
   error?: string
   updating: boolean
+  progress?: UpdateProgress
+}
+
+// UpdateProgress 是进行中的在线更新的阶段与发行包的已下载和总字节数，总字节数未知时为 0
+export interface UpdateProgress {
+  stage: 'download' | 'verify' | 'install' | 'restart'
+  downloaded: number
+  total: number
 }
 
 export interface AdminLog {
@@ -321,8 +333,16 @@ export interface FirstEventLatency {
   p95_ms: number
 }
 
+// PathListing 是路径选择器当前位置的内容，path 为空表示文件系统根列表
+export interface PathListing {
+  path: string
+  parent: string
+  entries: { name: string; path: string; dir: boolean }[]
+}
+
 export interface ServiceConfig {
   auto_start: boolean
+  hide_dock_icon: boolean
   request_body_log: boolean
   log_file: boolean
   log_max_total_mb: number
@@ -362,9 +382,11 @@ export interface ServiceConfig {
   warm_startup_concurrency: number
   per_account_concurrency: number
   routing_strategy: 'round-robin' | 'fill-first'
+  account_order: string
   upstream_channels: UpstreamChannel[]
   model_mapping: string
   model_channels: string
+  model_accounts: string
   api_key_accounts: string
   waa_backend: 'camoufox' | 'spidermonkey'
   media_output: 'inline' | 'url'

@@ -173,6 +173,11 @@ type AdminAccount struct {
 
 	// PairingRenewedAt 是远程配对账户最近一次由原电脑续签的时间，没有经配对续签时省略
 	PairingRenewedAt *time.Time `json:"pairing_renewed_at,omitempty"`
+
+	// Transition 是账户启停的后台收尾阶段，draining 为等待在途请求结束，syncing 为同步模型目录，没有收尾时省略
+	Transition string `json:"transition,omitempty"`
+	// ActiveRequests 是账户上进行中的请求数
+	ActiveRequests int `json:"active_requests"`
 }
 
 // AdminProxy 表示代理池中一个代理的可用性与绑定账户数
@@ -251,6 +256,7 @@ type ChromeImportInput struct {
 // RuntimeConfig 表示全局运行配置
 type RuntimeConfig struct {
 	AutoStart                 bool                 `json:"auto_start"`
+	HideDockIcon              bool                 `json:"hide_dock_icon"`
 	RequestBodyLog            bool                 `json:"request_body_log"`
 	AdminAuthEnabled          bool                 `json:"admin_auth_enabled"`
 	AdminUsername             string               `json:"admin_username"`
@@ -291,9 +297,11 @@ type RuntimeConfig struct {
 	WarmStartupConcurrency    int                  `json:"warm_startup_concurrency"`
 	PerAccountConcurrency     int                  `json:"per_account_concurrency"`
 	RoutingStrategy           string               `json:"routing_strategy"`
+	AccountOrder              string               `json:"account_order"`
 	UpstreamChannels          []string             `json:"upstream_channels"`
 	ModelMapping              string               `json:"model_mapping"`
 	ModelChannels             string               `json:"model_channels"`
+	ModelAccounts             string               `json:"model_accounts"`
 	APIKeyAccounts            string               `json:"api_key_accounts"`
 	WAABackend                string               `json:"waa_backend"`
 	MediaOutput               string               `json:"media_output"`
@@ -342,6 +350,7 @@ func (s *server) registerAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/accounts/tasks/{id}", s.handleDeleteAccountTask)
 	mux.HandleFunc("GET /api/pairing", s.handleActivePairing)
 	mux.HandleFunc("POST /api/pairing", s.handleCreatePairing)
+	mux.HandleFunc("GET /api/paths", s.handlePaths)
 	mux.HandleFunc("PUT /api/accounts/{id}", s.handleUpdateAccount)
 	mux.HandleFunc("DELETE /api/accounts/{id}", s.handleDeleteAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/login", s.handleLoginAccount)
@@ -356,6 +365,7 @@ func (s *server) registerAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/cooldowns", s.handleCooldowns)
 	mux.HandleFunc("DELETE /api/accounts/{id}/cooldowns/{scope}", s.handleClearCooldown)
 	mux.HandleFunc("GET /api/requests", s.handleRequests)
+	mux.HandleFunc("POST /api/video-tokens", s.handleVideoTokens)
 	mux.HandleFunc("POST /api/requests/{id}/cancel", s.handleCancelRequest)
 	mux.HandleFunc("GET /api/events", s.handleAdminEvents)
 }

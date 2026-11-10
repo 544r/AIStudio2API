@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/proxydial"
@@ -64,10 +65,16 @@ type Worker struct {
 	selected string
 	// inputMu 串行化页面输入与标签页切换，同一时刻只有一个标签页接收指针与输入
 	inputMu sync.Mutex
+	// inputWaiters 是正在等待 inputMu 的前台操作数
+	inputWaiters atomic.Int32
 	// frameMu 保护 frameBoosts 与刷新帧率的切换
 	frameMu sync.Mutex
 	// frameBoosts 是进行中的界面操作数，大于 0 时页面以 interactiveFrameRate 刷新
 	frameBoosts int
+	// idle 在最后一次界面操作 idleMinimizeDelay 后发出 memory-pressure，由 frameMu 保护
+	idle *time.Timer
+	// settle 在 Worker 就绪 readyMinimizeDelay 后发出一次 memory-pressure
+	settle *time.Timer
 }
 
 // tabUse 是一个标签页中进行中的受保护请求数，retired 表示该标签页已被重新载入的页面替换
@@ -119,9 +126,12 @@ func Start(ctx context.Context, options Options) (*Worker, error) {
 		return nil, err
 	}
 	if options.Headless && !options.liveView {
-		if err := worker.stopRendering(ctx); err != nil {
+		// 浏览器启动与首次载入按 interactiveFrameRate 刷新，Worker 就绪后降到 idleFrameDivisor 并停止标签页绘制
+		if _, err := worker.chromeEvaluate(ctx, idleRenderingExpression); err != nil {
 			return nil, fmt.Errorf("停止 Camoufox 标签页绘制: %w", err)
 		}
+		worker.idle = time.AfterFunc(idleMinimizeDelay, worker.minimizeMemory)
+		worker.settle = time.AfterFunc(readyMinimizeDelay, worker.minimizeMemory)
 	}
 	failed = false
 	return worker, nil
@@ -129,6 +139,9 @@ func Start(ctx context.Context, options Options) (*Worker, error) {
 
 // browserStartupTimeout 为 Camoufox 完成启动并响应 session.new 的最长等待
 const browserStartupTimeout = 30 * time.Second
+
+// pageImageTimeout 为页面载入等待官方 WAA 程序图片请求结束的上限，到期后页面照常就绪
+const pageImageTimeout = 30 * time.Second
 
 // pageReleaseTimeout 为页面载入结束后移除载入期间 BiDi 资源的期限
 const pageReleaseTimeout = 10 * time.Second
@@ -229,7 +242,30 @@ const interactiveFrameRate = 60
 // idleFrameDivisor 是无头 Worker 空闲时的 vsync 分频，页面每秒刷新 1 次
 const idleFrameDivisor = interactiveFrameRate
 
-// boostFrames 在无头 Worker 的界面操作期间把 vsync 分频设为 1，页面从下一次 vsync 起按 interactiveFrameRate 刷新，返回的函数结束本次操作，全部操作结束后恢复 idleFrameDivisor
+// idleRenderingExpression 把 vsync 分频设为 idleFrameDivisor 并停止选中标签页的绘制
+var idleRenderingExpression = fmt.Sprintf("Services.prefs.setIntPref('gfx.display.frame-rate-divisor', %d); gBrowser.selectedBrowser.renderLayers = false", idleFrameDivisor)
+
+// idleMinimizeDelay 为无头 Worker 最后一次界面操作后发出 memory-pressure 的空闲时长，与 SpiderMonkey 后端的空闲收缩 GC 相同
+const idleMinimizeDelay = 5 * time.Minute
+
+// readyMinimizeDelay 为无头 Worker 就绪后发出一次 memory-pressure 的延迟，回收浏览器启动与首次载入留下的渲染目标与 GC 垃圾
+const readyMinimizeDelay = 2 * time.Second
+
+// minimizeMemory 在没有进行中的界面操作时发出 memory-pressure heap-minimize，各进程回收 GC 堆与软件 WebRender 的渲染缓存
+func (worker *Worker) minimizeMemory() {
+	worker.frameMu.Lock()
+	defer worker.frameMu.Unlock()
+	if worker.frameBoosts > 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := worker.chromeEvaluate(ctx, "Services.obs.notifyObservers(null, 'memory-pressure', 'heap-minimize')"); err != nil {
+		slog.Warn("Camoufox 空闲回收内存失败", "error", err)
+	}
+}
+
+// boostFrames 在无头 Worker 的界面操作期间把 vsync 分频设为 1 并恢复选中标签页的图层绘制，页面从下一次 vsync 起按 interactiveFrameRate 刷新，可信指针事件像可见标签页一样派发；返回的函数结束本次操作，全部操作结束后恢复 idleFrameDivisor 并停止选中标签页的绘制
 func (worker *Worker) boostFrames(ctx context.Context) (func(), error) {
 	if !worker.options.Headless || worker.options.liveView {
 		return func() {}, nil
@@ -237,9 +273,10 @@ func (worker *Worker) boostFrames(ctx context.Context) (func(), error) {
 	worker.frameMu.Lock()
 	defer worker.frameMu.Unlock()
 	if worker.frameBoosts == 0 {
-		if _, err := worker.chromeEvaluate(ctx, "Services.prefs.setIntPref('gfx.display.frame-rate-divisor', 1)"); err != nil {
+		if _, err := worker.chromeEvaluate(ctx, "Services.prefs.setIntPref('gfx.display.frame-rate-divisor', 1); gBrowser.selectedBrowser.renderLayers = true"); err != nil {
 			return nil, fmt.Errorf("提高 Camoufox 刷新帧率: %w", err)
 		}
+		worker.idle.Stop()
 	}
 	worker.frameBoosts++
 	var once sync.Once
@@ -253,9 +290,10 @@ func (worker *Worker) boostFrames(ctx context.Context) (func(), error) {
 			}
 			restoreCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if _, err := worker.chromeEvaluate(restoreCtx, fmt.Sprintf("Services.prefs.setIntPref('gfx.display.frame-rate-divisor', %d)", idleFrameDivisor)); err != nil {
+			if _, err := worker.chromeEvaluate(restoreCtx, idleRenderingExpression); err != nil {
 				slog.Warn("恢复 Camoufox 刷新帧率失败", "error", err)
 			}
+			worker.idle.Reset(idleMinimizeDelay)
 		})
 	}, nil
 }
@@ -296,6 +334,25 @@ func (worker *Worker) createTab(ctx context.Context) (string, error) {
 		return "", errors.New("Camoufox BiDi 新标签页无效")
 	}
 	return contextID, nil
+}
+
+// lockInput 为前台操作取得 inputMu
+func (worker *Worker) lockInput() {
+	worker.inputWaiters.Add(1)
+	worker.inputMu.Lock()
+	worker.inputWaiters.Add(-1)
+}
+
+// lockInputIdle 在没有前台操作等待时取得 inputMu，后台新开对话让界面运行先接收输入
+func (worker *Worker) lockInputIdle() {
+	for {
+		worker.inputMu.Lock()
+		if worker.inputWaiters.Load() == 0 {
+			return
+		}
+		worker.inputMu.Unlock()
+		runtime.Gosched()
+	}
 }
 
 // selectTab 经浏览器界面层选中标签页并记为选中；调用方持有 inputMu
@@ -368,7 +425,7 @@ func (worker *Worker) Reload(ctx context.Context) error {
 	options := worker.options
 	worker.mu.Unlock()
 	options.StartupProgress = nil
-	worker.inputMu.Lock()
+	worker.lockInput()
 	defer worker.inputMu.Unlock()
 	worker.mu.Lock()
 	contextID := worker.contextID
@@ -474,7 +531,7 @@ func (worker *Worker) ProtocolHeaders(ctx context.Context) (http.Header, error) 
 
 // Proof 在一次页面调用中写入官网 prompt 并为 SHA-256 digest 生成 fresh WAA proof，页面值未同步时最多重试 5 秒
 func (worker *Worker) Proof(ctx context.Context, digest string, prompt string) (string, error) {
-	worker.inputMu.Lock()
+	worker.lockInput()
 	defer worker.inputMu.Unlock()
 	worker.mu.Lock()
 	defer worker.mu.Unlock()
@@ -527,6 +584,10 @@ func (worker *Worker) Close() error {
 	connection := worker.connection
 	process := worker.process
 	worker.mu.Unlock()
+	if worker.idle != nil {
+		worker.idle.Stop()
+		worker.settle.Stop()
+	}
 	if client != nil && connection != nil {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		_, _ = client.command(closeCtx, "session.end", map[string]any{})
@@ -603,7 +664,7 @@ type loadedPage struct {
 	catalog PageCatalog
 }
 
-// openPage 在 contextID 标签页中按官网冷启动载入新对话页：preload 在官网 WAA service 首次取请求头时交出该实例，页面载入期间记下目录 RPC 响应与第一个带 x-aistudio-visit-id 的 MakerSuite 请求的公共头，等官方 WAA 程序的图片请求完成后返回页面对象
+// openPage 在 contextID 标签页中按官网冷启动载入新对话页：preload 在官网 WAA service 首次取请求头时交出该实例，页面载入期间记下目录 RPC 响应与第一个带 x-aistudio-visit-id 的 MakerSuite 请求的公共头，等官方 WAA 程序的图片请求结束或到达上限后返回页面对象
 func (worker *Worker) openPage(ctx context.Context, options Options, contextID string) (loadedPage, error) {
 	client := worker.client
 	serviceChannel := rand.Text()
@@ -640,7 +701,7 @@ func (worker *Worker) openPage(ctx context.Context, options Options, contextID s
 		if subscribed {
 			removals = append(removals, func() error {
 				_, err := client.command(releaseCtx, "session.unsubscribe", map[string]any{
-					"events":   []string{"network.beforeRequestSent", "network.responseCompleted"},
+					"events":   []string{"network.beforeRequestSent", "network.responseCompleted", "network.fetchError"},
 					"contexts": []string{contextID},
 				})
 				return err
@@ -657,7 +718,7 @@ func (worker *Worker) openPage(ctx context.Context, options Options, contextID s
 	if err := parallel(
 		func() error {
 			_, err := client.command(ctx, "session.subscribe", map[string]any{
-				"events":   []string{"browsingContext.navigationStarted", "script.message", "network.beforeRequestSent", "network.responseCompleted"},
+				"events":   []string{"browsingContext.navigationStarted", "script.message", "network.beforeRequestSent", "network.responseCompleted", "network.fetchError"},
 				"contexts": []string{contextID},
 			})
 			subscribed = err == nil
@@ -749,8 +810,11 @@ func (worker *Worker) openPage(ctx context.Context, options Options, contextID s
 		return loadedPage{}, err
 	}
 	options.reportStartup(StartupBootstrappingWAA)
-	if err := client.waitLoad(ctx, contextID, 60*time.Second, "完成官方 WAA 程序的图片请求", func(load *pageLoad) bool { return load.image }); err != nil {
-		return loadedPage{}, err
+	if err := client.waitLoad(ctx, contextID, pageImageTimeout, "完成官方 WAA 程序的图片请求", func(load *pageLoad) bool { return load.image }); err != nil {
+		if ctx.Err() != nil {
+			return loadedPage{}, err
+		}
+		slog.Warn("官方 WAA 程序的图片请求没有结束，继续载入页面", "error", err)
 	}
 	client.mu.Lock()
 	observed := client.loads[contextID].headers
@@ -758,7 +822,7 @@ func (worker *Worker) openPage(ctx context.Context, options Options, contextID s
 	if err := release(); err != nil {
 		return loadedPage{}, err
 	}
-	if err := dismissKnownOverlays(ctx, client, contextID); err != nil {
+	if _, err := dismissKnownOverlays(ctx, client, contextID); err != nil {
 		return loadedPage{}, err
 	}
 	page, err := client.callFunctionHandle(ctx, contextID, pageObjectFunction, pageHandle(service))

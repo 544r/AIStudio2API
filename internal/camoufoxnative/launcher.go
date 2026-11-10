@@ -88,10 +88,12 @@ func launchBrowser(ctx context.Context, options Options, config map[string]any) 
 	}
 	if options.Headless && !options.liveView {
 		prefs["layout.frame_rate"] = interactiveFrameRate
-		// gfx.display.frame-rate-divisor 为每次分发给页面与合成器的 vsync 间隔数，空闲时页面每秒刷新 1 次
-		prefs["gfx.display.frame-rate-divisor"] = idleFrameDivisor
 		// gfx.webrender.enable-subpixel-aa 为 false 时 WebRender 把字形光栅化到单通道图集，不分配 RGBA 字形图集
 		prefs["gfx.webrender.enable-subpixel-aa"] = false
+		if runtime.GOOS == "windows" {
+			// timer.maximum_firing_delay_tolerance_ms 为 0 时 Windows 定时器线程在最早的定时器到期时唤醒，界面操作中的短定时器按期触发
+			prefs["timer.maximum_firing_delay_tolerance_ms"] = "0"
+		}
 	}
 	if options.CacheDirectory != "" {
 		for key, value := range cachePreferences(options.CacheDirectory) {
@@ -544,6 +546,8 @@ func firefoxPreferences(proxyValue, bypass string) (map[string]any, error) {
 		"extensions.webextensions.remote": false,
 		// network.process.enabled 为 false 时网络在主进程运行，不单独启动 socket 进程
 		"network.process.enabled": false,
+		// network.http.http2.ping-threshold 为 HTTP/2 连接没有收到数据多少秒后发送 PING 探测连接是否失效
+		"network.http.http2.ping-threshold": 10,
 		// media.rdd-process.enabled 与 media.utility-process.enabled 为 false 时不单独启动 rdd 与媒体 utility 进程
 		"media.rdd-process.enabled":     false,
 		"media.utility-process.enabled": false,
@@ -551,6 +555,10 @@ func firefoxPreferences(proxyValue, bypass string) (map[string]any, error) {
 		"javascript.options.mem.nursery.max_kb": 4096,
 		// gfx.webrender.max-shared-surface-size 为 WebRender 共享渲染目标的边长上限
 		"gfx.webrender.max-shared-surface-size": 512,
+		// media.sanity-test.disabled 为 true 时全新 profile 启动跳过图形自检窗口
+		"media.sanity-test.disabled": true,
+		// browser.opaqueResponseBlocking.javascriptValidator 为 false 时不单独启动校验不透明响应的 JS 校验 utility 进程
+		"browser.opaqueResponseBlocking.javascriptValidator": false,
 	}
 	proxyValue = strings.TrimSpace(proxyValue)
 	if proxyValue == "" {

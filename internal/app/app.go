@@ -93,7 +93,7 @@ func runCommand(args []string, logs *logOutput, executable string) (restart bool
 		cancel()
 		<-stopped
 	}
-	shell := newShell(options.openUI, stopService)
+	shell := newShell(options.openUI, cfg.HideDockIcon, stopService)
 	ready := make(chan serviceReady, 1)
 	shellCtx, stopShell := context.WithCancel(ctx)
 	defer stopShell()
@@ -163,6 +163,9 @@ func runService(ctx context.Context, cancel func(), cfg config.Config, options c
 	manager.states = states
 	manager.logs = logs
 	updater := newSelfUpdater(buildVersion(), executable, manager.egressProxy, logService, updateRestart(cancel, restarting, logService))
+	if err := removeReplacedExecutables(executable); err != nil {
+		logService("WARN", "删除在线更新留下的旧版本失败 | 错误="+err.Error())
+	}
 	started, err = runServer(ctx, cfg, manager, updater, func(address string) {
 		ready <- serviceReady{url: address, log: logService}
 	})
@@ -213,6 +216,9 @@ func parseFlags(args []string, cfg *config.Config) (commandOptions, error) {
 	return options, nil
 }
 
+// mediaLimit 是 runtime/media 的总字节上限
+const mediaLimit = 1 << 30
+
 // runServer 管理 HTTP 监听，就绪后以管理页面地址调用 onReady，运行到 ctx 结束或监听出错；started 表示监听曾经就绪
 func runServer(ctx context.Context, cfg config.Config, manager *runtimeManager, updater api.UpdateService, onReady func(address string)) (started bool, err error) {
 	manager.requests.log("service", "INFO", fmt.Sprintf("管理监听启动 | 地址=%s", cfg.ListenAddr))
@@ -245,7 +251,7 @@ func runServer(ctx context.Context, cfg config.Config, manager *runtimeManager, 
 		AdminAuthEnabled: cfg.AdminAuthEnabled, AdminUsername: cfg.AdminUsername, AdminPassword: cfg.AdminPassword,
 		AccountPushToken: cfg.AccountPushToken,
 		AdminSessionPath: filepath.Join("runtime", "admin-sessions.json"),
-		MediaDir:         filepath.Join("runtime", "media"), MediaLinks: manager.mediaLinks,
+		MediaDir:         filepath.Join("runtime", "media"), MediaLimit: mediaLimit, MediaLinks: manager.mediaLinks,
 		ResponseModes: manager.responseModes, WaitLaunch: manager.WaitLaunch,
 		SearchSettings: manager.searchSettings, EgressProxy: manager.egressProxy, States: manager.states,
 	})

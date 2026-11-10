@@ -105,6 +105,7 @@ Chrome Local State + Profile Preferences + Web Data/token_service
   -> 有 binding key：OAuthMultilogin sentinel 请求取得 DBSC challenge
      -> NCrypt 设备密钥签发 ES256 assertion
      -> X25519/HPKE 解密服务端 Cookie
+     -> 响应为 google.com 登记 DBSC 会话时保存会话登记
   -> 没有 binding key：MultiBearer 头的 OAuthMultilogin 直接返回明文 Cookie
   -> 保存 Playwright storage state 结构与续签材料
 ```
@@ -113,9 +114,11 @@ Chrome 运行期间以排他锁打开 `Web Data`，程序把 `Web Data` 与 `Web
 
 设备绑定的账号 OAuthMultilogin 使用 `MultiOAuth` 头，`token_service.binding_key` 为空的账号使用 `MultiBearer <refresh token>:<Gaia ID>` 头，一次请求返回明文 Cookie。`MultiOAuth` 第一次 assertion 为 `DBSC_CHALLENGE_IF_REQUIRED`，响应提供 challenge；第二次 assertion 的 JWT header 使用 `ES256` 与 `DEVICE_BOUND_SESSION_CREDENTIALS_ASSERTION`。payload 绑定 Google OAuth client、challenge、设备公钥 issuer 和临时 HPKE 公钥。Cookie 密文使用 X25519、HKDF-SHA256 与 AES-128-GCM 解密。
 
+Google 对部分账户强制设备绑定会话：OAuthMultilogin 响应的 `device_bound_session_info` 为 `GOOGLE_COM` 登记一个 DBSC 会话，给出 `session_identifier`（`sidts_session`）、`refresh_url`（`/RotateBoundCookies`）与绑定的 `__Secure-1PSIDTS`、`__Secure-3PSIDTS`、`__Secure-1PSIDRTS`、`__Secure-3PSIDRTS`，会话以同一把设备绑定密钥刷新，不刷新时签发约 2 小时后失效。服务在 Worker 启动、普通 RPC、受保护 RPC 与 Live 建连之前检查绑定 Cookie，最早到期的一项剩余不足 2 分钟时按 Chromium `RegistrationFetcher` 刷新：`POST` 刷新地址并带 `Sec-Secure-Session-Id`，服务端返回 `403` 与 `Secure-Session-Challenge`；以设备密钥签发 header 为 `{"alg":"ES256","typ":"dbsc+jwt"}`、payload 为 `{"jti":"<challenge>"}` 的 JWT，放入 `Secure-Session-Response` 重发，`200` 响应下发新的绑定 Cookie。新 Cookie 写回 `storage-state.json` 并写入账户当前 WAA Worker 的页面。刷新返回 3xx 或 4xx（`429` 除外）时进入认证恢复。远程配对上传的状态不带 DBSC 会话登记。
+
 OAuthMultilogin 以该 Profile 的 Chrome 身份发出，请求头与 Chrome `GaiaAuthFetcher` 相同：HTTP/2 下依次为 `content-length`、`authorization`、`content-type`、`sec-fetch-site: none`、`sec-fetch-mode: no-cors`、`sec-fetch-dest: empty`、`user-agent`、`accept-encoding: gzip, deflate, br, zstd`、`accept-language` 与 `priority: u=4, i`。`user-agent` 的主版本取 User Data 的 `Last Version`；`accept-language` 取 Profile `Preferences` 的 `intl.accept_languages`，没有该项时取 `intl.selected_languages`，按 Chromium 的规则在带地区的语言后补主语言并依次加 `q=0.9` 到 `q=0.1`。导入与续签都读取账户导入来源的 User Data 目录中当前的 Chrome 版本与该 Profile 的语言设置，来源没有记录目录时读取稳定版 Chrome 的默认目录。
 
-Chrome 导入状态在 `storage-state.json` 的 `aistudio2api` 扩展中保存来源（浏览器、User Data 目录、Profile 与邮箱）、Gaia ID、refresh token 与 wrapped binding key。登录页跳转、签名 Cookie 失效、HTTP `401` 与协议 Code 16 进入同一认证恢复流程，覆盖 Worker 预热、按需启动、普通 RPC、受保护 RPC 与 Live 建连。服务优先在同一账户出口续签 Cookie；保存的 OAuth 材料被拒绝时，从当前 Chrome 匹配原账户邮箱与 Gaia ID，更新来源材料。没有 `aistudio2api` 扩展的账户在本机 Chrome 登录着同一邮箱时，从 Chrome 导入该邮箱的材料并写入扩展，此后按 Chrome 导入账户续签。有效 Cookie 提交后使动态头失效、关闭该账户 WAA runtime，并重放一次。恢复失败后，服务以账户的指纹、出口与保存的 Cookie 打开 AI Studio 新对话页：被转到 Google 登录页时账户标为 `auth_required`，管理事件同步发布账户状态，后续调度使用其他合格账户；页面正常打开时账户状态不变，只有该次请求失败或换号。
+Chrome 导入状态在 `storage-state.json` 的 `aistudio2api` 扩展中保存来源（浏览器、User Data 目录、Profile 与邮箱）、Gaia ID、refresh token、wrapped binding key 与 DBSC 会话登记。登录页跳转、签名 Cookie 失效、HTTP `401` 与协议 Code 16 进入同一认证恢复流程，覆盖 Worker 预热、按需启动、普通 RPC、受保护 RPC 与 Live 建连。服务优先在同一账户出口续签 Cookie；保存的 OAuth 材料被拒绝时，从当前 Chrome 匹配原账户邮箱与 Gaia ID，更新来源材料。没有 `aistudio2api` 扩展的账户在本机 Chrome 登录着同一邮箱时，从 Chrome 导入该邮箱的材料并写入扩展，此后按 Chrome 导入账户续签。有效 Cookie 提交后使动态头失效、关闭该账户 WAA runtime，并重放一次。恢复失败后，服务以账户的指纹、出口与保存的 Cookie 打开 AI Studio 新对话页：被转到 Google 登录页时账户标为 `auth_required`，管理事件同步发布账户状态，后续调度使用其他合格账户；页面正常打开时账户状态不变，只有该次请求失败或换号。
 
 认证恢复等待同账户的正常请求结束；并发失效复用一次提交结果。替换登录材料推进认证代际，旧请求的认证结果按代际和请求顺序写回；生成正常结束后确认认证有效。HTTP `403`、协议 Code 7 与 Drive `unauthorized_client` 保留模型权限或 Drive 授权含义。隔离 Camoufox 登录和外部 storage state 在本机 Chrome 没有同一邮箱时只使用各自的登录材料。
 
@@ -148,6 +151,11 @@ Chrome 导入状态在 `storage-state.json` 的 `aistudio2api` 扩展中保存�
       "gaia_id": "<GAIA_ID>",
       "refresh_token": "<REFRESH_TOKEN>",
       "wrapped_binding_key": "<BASE64>"
+    },
+    "bound_session": {
+      "id": "sidts_session",
+      "refresh_url": "https://accounts.google.com/RotateBoundCookies",
+      "credentials": ["__Secure-1PSIDTS", "__Secure-3PSIDTS", "__Secure-1PSIDRTS", "__Secure-3PSIDRTS"]
     }
   }
 }
@@ -171,7 +179,9 @@ Cookie 的 `name`、`value`、`domain`、`path`、`expires`、`httpOnly`、`secu
 
 Google 邮箱的小写形式同时作为账户目录、管理页面标识和日志来源。新账户的 locale 与 timezone 读取当前电脑设置，管理页面使用浏览器语言和 IANA 时区；CLI 使用操作系统语言和时区。初始化、WAA、MakerSuite、OAuth 续签和 Drive 使用账户固定代理。locale 同时设置 navigator language、Accept-Language 与地区，timezone 设置浏览器时区；重新登录和 WAA runtime 复用同一账户指纹。同一电脑上的多个进程按邮箱共享 WAA runtime lease，调度器只会为未被占用的邮箱创建 Worker。
 
-`runtime-state.json` 根字段为 `cooldowns`、`resources`、`model_access`、`benefit_tier`、`catalog_fingerprint`。cooldown value 为 `{until,reason?}`；model access value 为 `{state,checked_at,reason?}`；resource value 为 `{kind?,name?,mime?,size?,purpose?,created_at,video?:{model,seconds,size,file?},alias?,sha256?,video_duration?,used_at?,display_name?}`：`alias` 为上传时指定的公开文件 ID，`sha256` 为内容的 SHA-256 摘要（Base64），`video_duration` 为视频时长（纳秒），`used_at` 为内联附件最近被请求引用的时间，`display_name` 为内联附件在请求中给出的文件名。
+`runtime-state.json` 根字段为 `cooldowns`、`resources`、`model_access`、`benefit_tier`、`catalog_fingerprint`。cooldown value 为 `{until,reason?}`；model access value 为 `{state,checked_at,reason?}`；resource value 为 `{kind?,name?,mime?,size?,purpose?,created_at,video?:{model,seconds,size,file?,prompt?,completed_at?},alias?,sha256?,video_duration?,used_at?,display_name?,expires_at?}`：`alias` 为上传时指定的公开文件 ID，`sha256` 为内容的 SHA-256 摘要（Base64），`video_duration` 为视频时长（纳秒），`used_at` 为内联附件最近被请求引用的时间，`display_name` 为内联附件在请求中给出的文件名，`expires_at` 为上传文件的到期时间。
+
+生成服务启动时与之后每 10 分钟删除各账户到期的资源：上传文件在 `expires_at` 之后，内联附件闲置 1 小时且没有进行中的请求引用之后，生成视频与其任务自完成起 48 小时（没有完成的任务自创建起 48 小时），Live 续接凭证自最近一次发放起 24 小时，旧版本留下的请求临时文件（以 `drive-file` 记录、名为 `inline-media-<序号>` 的内联附件，Omni 输入图片，以及没有摘要、其他账户有更早上传的同名同大小文件的跨账户副本）自上传起 48 小时。Drive 中的文件先删除再解除绑定，Drive 返回 404 时按已删除处理，其他删除失败保留绑定、下一轮重试；没有空闲并发槽位的账户在下一轮回收；其余没有 `expires_at` 的上传文件不按时间删除。
 
 每次运行状态事务先取得 `auth/.leases/<账户>.runtime.lock`，每 25ms 尝试一次，等待上限为 2 秒；携带调用方 context（Go 取消上下文）的事务在调用方取消或 deadline 更早到达时立即结束。取得锁后重新读取当前磁盘值，只合并目标字段，以临时文件原子替换 `runtime-state.json`，再同步内存状态与资源归属。锁等待失败、读取失败、写回失败和 unlock 失败均返回原始错误链。
 
@@ -204,6 +214,12 @@ Google 邮箱的小写形式同时作为账户目录、管理页面标识和日�
 | 9 | 条款对话框为 `1`，onboarding 表单为 `5` |
 
 服务在每个账户本进程的首次目录同步前读取 `GetLoggingContext`，需要同意时按 field 10 选择 field 9，以不订阅邮件发送 `AcceptTerms`；成功后本进程内不再读取，失败时本次目录同步失败，下次同步重新读取。
+
+### Google AI 方案欢迎对话框
+
+Google AI 方案账户的 `GetUserPreferences` field 12 不为真时，官网弹出欢迎对话框 `ms-g1-welcome-dialog`，页面载入几秒后才打开，打开时遮挡 Run 按钮。点击 Continue 后官网发送 `UpdateUserPreferences`，field 12 为真，field mask 为 `has_seen_g1_welcome_dialog`。
+
+Camoufox 后端在页面载入后、每次运行开始时与等待 Run 按钮可点时关闭该对话框。
 
 ### 地区或账户不受支持
 
@@ -764,7 +780,7 @@ generation config、安全设置、工具与转写配置在选择账户前按各
 
 - 流式请求在写出响应头前等待首个事件：参数错误与首个事件之前的上游错误按非流式返回 HTTP 状态与错误对象；10 秒内没有事件时先写出响应头，此后的错误以各协议的流内错误事件返回
 - 非流式请求收齐上游事件后再输出，上游流中途中断或在完成帧之前结束时换号重发
-- `NONSTREAM_KEEPALIVE=true` 时，Chat Completions、Responses、Messages、Gemini `generateContent`、Interactions 与图片生成的非流式请求在 10 秒内没有结果时先写出 `200` 与 `Content-Type: application/json`，之后每 10 秒写出一个换行，结果就绪后写出 JSON 正文；此后的错误以各协议的错误对象作为正文，访问日志与请求账本记录错误的 HTTP 状态
+- `NONSTREAM_KEEPALIVE=true` 时，Chat Completions、Responses、Messages、Gemini `generateContent`、Interactions 与图片生成的非流式请求在 10 秒内没有结果时先写出 `200`、`Content-Type: application/json` 与 `X-Accel-Buffering: no`，之后每 10 秒写出一个换行，结果就绪后写出 JSON 正文；此后的错误以各协议的错误对象作为正文，访问日志与请求账本记录错误的 HTTP 状态
 - `FAKE_STREAM=true` 时，上述协议的流式请求按非流式方式生成：收齐上游事件、中途中断时换号重发，再以各协议的流式事件输出；等待期间按下文的流式心跳保持连接
 
 错误响应根形状为 `[null,[code,message,...]]`。输入被上游拒绝时帧为 `[null,[block_reason,null,message]]`：
@@ -776,7 +792,8 @@ generation config、安全设置、工具与转写配置在选择账户前按各
 
 - HTTP/协议错误形成失败
 - 读取上游响应时连接中断或上游流在完成帧之前结束，报告为上游流中断与已接收帧数
-- 上游 finish reason 作为正常终态保留并映射到各公开协议
+- 上游以内容策略类原因（safety、recitation、blocklist、prohibited_content、spii 与对应的图片原因）结束时形成失败：还没有输出时返回 HTTP 502 与各协议的错误对象，已开始流式输出时以流内错误结束，错误消息写明结束原因与上游说明
+- 其余上游 finish reason 作为正常终态保留并映射到各公开协议
 
 各协议的具体终态转换如下：
 
@@ -786,10 +803,10 @@ generation config、安全设置、工具与转写配置在选择账户前按各
 | `stop_sequence` | `stop` | `completed` | `stop_sequence` 与实际序列 | `STOP` |
 | `max_tokens` | `length` | `incomplete/max_output_tokens` | `max_tokens` | `MAX_TOKENS` |
 | `continuation` | `length` | `incomplete/max_output_tokens` | `max_tokens` | `CONTINUATION` |
-| safety、recitation、blocklist、prohibited_content、spii、图片对应原因与 `provider_*` | `content_filter` | `incomplete/content_filter` | `refusal` | 对应 Gemini 枚举或 `OTHER` |
+| `provider_*` | `content_filter` | `incomplete/content_filter` | `refusal` | 对应 Gemini 枚举或 `OTHER` |
 | other、language、malformed_function_call、malformed_response、签名缺失等其他终态 | `stop`，含函数调用时 `tool_calls` | `completed` | `end_turn`，含函数调用时 `tool_use` | 对应 Gemini 枚举 |
 
-内容拦截终态优先于同一结果中的工具调用终态，已产生的正文、reasoning、工具事件和 usage 保持在响应中。`provider_*` 在 Chat choice、Responses response、Anthropic message 或 `message_delta` 的 `provider_finish_reason` 中保留原值；Gemini 对 Build 通道的 `provider_<名称>` 输出大写的原枚举名，对 Playground 的 `provider_<编号>` 输出 `OTHER` 并用 `finishMessage` 保留编号。`malformed_response`（Playground 编号 19）在 AI Studio 页面显示为 `Content blocked`。
+`provider_*` 终态优先于同一结果中的工具调用终态，已产生的正文、reasoning、工具事件和 usage 保持在响应中。`provider_*` 在 Chat choice、Responses response、Anthropic message 或 `message_delta` 的 `provider_finish_reason` 中保留原值；Gemini 对 Build 通道的 `provider_<名称>` 输出大写的原枚举名，对 Playground 的 `provider_<编号>` 输出 `OTHER` 并用 `finishMessage` 保留编号。`malformed_response`（Playground 编号 19）在 AI Studio 页面显示为 `Content blocked`。
 
 ## 6. 函数、Google 工具、Drive 与媒体
 
@@ -983,9 +1000,9 @@ GET clients6.google.com Drive v3 discovery（每个账户第一次上传前一�
 `、文件的 base64、`
 --<分隔串>--`，`Content-Type` 为 `multipart/related; boundary="<分隔串>"`。上传与 discovery 都带 `X-JavaScript-User-Agent: google-api-javascript-client/1.1.0`、`X-Requested-With: XMLHttpRequest`、`X-Goog-Encode-Response-If-Executable: base64` 与 `X-ClientDetails`（账户指纹的 `appVersion`、`platform` 与 User-Agent 按 encodeURIComponent 编码），经 CORS 预检发送；上传以 bearer token 授权、带 `Sec-Fetch-Site: cross-site` 与 `Sec-Fetch-Storage-Access: none`，discovery 以 Cookie、SAPISID 签名与 `X-Goog-AuthUser` 授权、带 `Sec-Fetch-Site: same-site`。
 
-Drive token、上传和下载使用文件所属账户的固定出口。文件 ID 与账户绑定写入 `runtime-state.json`；生成请求可以组合不同账户的文件，其他账户的文件会临时复制到本次生成账户；失败尝试的副本随即回收，成功尝试的副本在请求结束后回收。
+Drive token、上传和下载使用文件所属账户的固定出口。文件 ID 与账户绑定写入 `runtime-state.json`；生成请求可以组合不同账户的文件，其他账户的文件会临时复制到本次生成账户；失败尝试的副本随即回收，成功尝试的副本在请求结束后回收。副本的绑定带自复制起 48 小时的 `expires_at`，服务在请求进行中退出时由到期资源回收删除。
 
-生成请求的内联附件优先上传到本次生成账户，正文使用 Drive file Part。上传的文件以请求给出的文件名命名，没有文件名时为 `inline-media-<序号>`，模型以这个名称引用附件。上传的文件以 `inline-media` 绑定写入该账户的 `runtime-state.json`，记录 MIME、内容的 SHA-256、请求给出的文件名与最近使用时间，不出现在公开文件接口中；同一账户之后的请求中 MIME、内容与文件名都相同的附件直接引用该文件，同一请求中相同的附件只上传一次；闲置 1 小时且没有进行中的请求引用的文件，在该账户下一次带内联附件的请求结束时删除，没有后续请求时由生成服务每 10 分钟一次的闲置资源回收删除。`GenerateContent` 返回 404 且请求引用了已上传的内联附件时，服务以 `GET https://www.googleapis.com/drive/v3/files/<ID>` 查询这些文件，解除已不存在的文件的绑定，在同一账户重新上传后重试一次。`GenerateAccessToken` 明确返回 `401`、Code 16 和 `OAuth error: unauthorized_client` 时，正文保留原始 inline data Part，账户继续参与普通生成调度；其他令牌错误保持失败语义。上传使用公开适配器输出的 MIME 和字节内容。图片、音频、视频、PDF 等附件的支持范围由所选模型决定。普通文本和 YouTube 外部媒体保持各自的 Part 编码。
+生成请求的内联附件优先上传到本次生成账户，正文使用 Drive file Part。上传的文件以请求给出的文件名命名，没有文件名时为 `inline-media-<序号>`，模型以这个名称引用附件。上传的文件以 `inline-media` 绑定写入该账户的 `runtime-state.json`，记录 MIME、内容的 SHA-256、请求给出的文件名与最近使用时间，不出现在公开文件接口中；同一账户之后的请求中 MIME、内容与文件名都相同、闲置不到 1 小时的附件直接引用该文件，同一请求中相同的附件只上传一次；闲置 1 小时且没有进行中的请求引用的文件，在该账户下一次带内联附件的请求结束时删除，没有后续请求时由到期资源回收删除（见“账户持久状态”节）。`GenerateContent` 返回 404 且请求引用了已上传的内联附件时，服务以 `GET https://www.googleapis.com/drive/v3/files/<ID>` 查询这些文件，解除已不存在的文件的绑定，在同一账户重新上传后重试一次。`GenerateAccessToken` 明确返回 `401`、Code 16 和 `OAuth error: unauthorized_client` 时，正文保留原始 inline data Part，账户继续参与普通生成调度；其他令牌错误保持失败语义。上传使用公开适配器输出的 MIME 和字节内容。内联附件、Files API 上传与下载的外部媒体的 MIME 缺失、不含子类型或为 `application/octet-stream` 时按内容与文件名识别；内容为文本而 MIME 不是 `text/*`、`application/json` 或 `application/x-ipynb+json` 时以 `text/plain` 发送。图片、音频、视频、PDF 等附件的支持范围由所选模型决定。普通文本和 YouTube 外部媒体保持各自的 Part 编码。
 
 `POST /v1/files` 的未知长度上传使用 Drive resumable upload 和 8 MiB 分块，`GET /v1/files/{id}` 从资源绑定读取文件名、大小、purpose 与创建时间；客户端取消会终止上传并释放账户租约。公开文件字段见“Files、Transcribe 与媒体”节。
 
@@ -1032,7 +1049,7 @@ Drive token、上传和下载使用文件所属账户的固定出口。文件 ID
 
 ### Omni Interaction
 
-模型目录 field 79 类型为 `2` 且不是后台任务的模型（`gemini-omni-1.1-flash`、`gemini-omni-flash-preview`）不接受 `GenerateContent`，四套公开生成接口对这类模型改用 `CreateInteractionStream`，账户选择、Worker 与 WAA 与 GenerateContent 相同，WAA proof 位于 field 5，binding 为发送的全部文本以空格连接：
+模型目录 field 79 类型为 `2` 且不是后台任务的模型（`gemini-omni-1.1-flash`、`gemini-omni-flash-preview`）不接受 `GenerateContent`，四套公开生成接口对这类模型改用 `CreateInteractionStream`，账户选择、Worker 与 WAA 与 GenerateContent 相同，WAA proof 位于 field 5，binding 为发送的文本与内联图片的 Base64 按内容顺序以空格连接：
 
 ```json
 [1, 1, null, <INTERACTION>, "<WAA_PROOF>", 1]
@@ -1042,10 +1059,10 @@ Drive token、上传和下载使用文件所属账户的固定出口。文件 ID
 | ---: | --- |
 | 6 | system instruction |
 | 17 | `["models/<MODEL_ID>", [null,null,null,null,null,<THINKING_LEVEL>,1,<MAX_OUTPUT_TOKENS>]]`，历史中没有模型输出时配置索引 24 为 `[]`，设置视频任务时为 `[<TASK>]`（`1`–`5` 依次为 text_to_video、image_to_video、reference_to_video、edit、extend） |
-| 26 | `[[<STEP>...]]`，用户 step 为 `[[<CONTENT>...]]`，模型 step 为 `[null,[<CONTENT>...]]`；文本 content 为 `[[<TEXT>]]`，Drive 附件 content 为 `[null×8,["<DRIVE_FILE_ID>"]]` |
+| 26 | `[[<STEP>...]]`，用户 step 为 `[[<CONTENT>...]]`，模型 step 为 `[null,[<CONTENT>...]]`；文本 content 为 `[[<TEXT>]]`，内联图片 content 为 `[null,[<MIME 枚举>,"<BASE64>"]]`，Drive 附件 content 为 `[null×8,["<DRIVE_FILE_ID>"]]` |
 | 53 | 输出格式 `[[[null,null,null,[null,null,null,<ASPECT>,[<SECONDS>],<RESOLUTION>]]]]`：宽高比 `1` 为 16:9、`2` 为 9:16，分辨率 `1`–`4` 为 360p、720p、1080p、4k，省略时取模型 `video_output_resolutions` 的第一项；任务为 `edit` 时 interaction 只到索引 26 |
 
-thinking level 取值 MINIMAL=1、LOW=2、MEDIUM=3、HIGH=4，由 `reasoning_effort` 或思考预算按模型支持的等级换算，默认使用目录默认等级。Interaction 请求接受 user、assistant 与 tool 消息，tool 消息按 user 处理，相邻同角色消息合并为一个 step，历史函数调用、函数结果与代码执行改写为 Gemini API JSON 文本，assistant 消息中的附件移到下一个 user step；内联附件先上传到所选账户的 Drive，再以 file ID 引用，文件 ID 不参与 binding。音频附件由上游以 code 3 `Audio input modality is not enabled for this model` 拒绝，映射为 HTTP 400；函数声明与 Google 工具不发送，stop sequences 与 GenerateContent 相同在本地匹配，temperature、topP、topK 与 seed 不发送。
+thinking level 取值 MINIMAL=1、LOW=2、MEDIUM=3、HIGH=4，由 `reasoning_effort` 或思考预算按模型支持的等级换算，默认使用目录默认等级，目录没有思考档位能力的模型不发送。Interaction 请求接受 user、assistant 与 tool 消息，tool 消息按 user 处理，相邻同角色消息合并为一个 step，历史函数调用、函数结果与代码执行改写为 Gemini API JSON 文本，assistant 消息中的附件移到下一个 user step；内联图片以 Base64 直接发送，其他内联附件先上传到所选账户的 Drive，再以 file ID 引用，文件 ID 不参与 binding。音频附件由上游以 code 3 `Audio input modality is not enabled for this model` 拒绝，映射为 HTTP 400；函数声明与 Google 工具不发送，stop sequences 与 GenerateContent 相同在本地匹配，temperature、topP、topK 与 seed 不发送。
 
 视频设置来自 Interactions `response_format` 的 `{"type":"video","aspect_ratio","duration","resolution"}` 与 `generation_config.video_config.task`，或 Gemini API `generationConfig.responseFormat` 的 `video.aspectRatio`、`video.duration`、`video.resolution` 与扩展字段 `generationConfig.videoConfig.task`；Interactions `response_modalities` 的 `video` 与 Gemini API `generationConfig.responseModalities` 的 `VIDEO` 等同于不带设置的视频输出格式；`duration` 取 `"4s"` 或秒数并四舍五入为整秒，宽高比与分辨率换成最接近的上游取值，无法解析的取值与未知任务返回 400。
 
@@ -1075,7 +1092,8 @@ thinking level 取值 MINIMAL=1、LOW=2、MEDIUM=3、HIGH=4，由 `reasoning_eff
 | 7 | 工具列表，见下文 |
 | 16 | 续接的上一轮 interaction ID |
 | 18 | agent 目标，见下文 |
-| 22 | Antigravity 的远程环境 `[null,null,1]` |
+| 22 | 远程环境：field 1 源 `[[<类型>,"<源>","<目标>","<内容>","<编码>"]...]`（类型 gcs `2`、inline `3`、repository `4`），field 2 出站白名单 `[[["<域名>",[["<头>","<值>"]...],"<凭据>"]...]]`（有凭据时只发凭据），field 3 禁止出站 `1`，field 4 要更新的已有环境 ID；Antigravity 未设置环境时为 `[null,null,1]` |
+| 23 | 只引用已有环境、不带源与网络设置时的环境 ID |
 | 26 | 与 Omni Interaction 相同的 step 列表，见下文 |
 
 agent 目标的 field 1 为 agent 名称。Deep Research 为 `["<AGENT>", null, [<思考摘要>, <可视化>, <协作规划>]]`：思考摘要 `1` 为 auto、`2` 为 none，可视化 `2` 为 auto、`1` 为 off，协作规划开启时为 `true`、关闭时省略，默认 `[1,2]`。field 79 InteractionConfig 的 field 6 给出默认模型的 agent（Antigravity）为 `["<AGENT>"]`，指定模型或 token 上限时 field 12 为 `["<MODEL>",null,null,null,null,null,<MAX_TOTAL_TOKENS>]`。公开 Interactions 的 `agent_config` 按官方取值写入这些位置。
@@ -1210,7 +1228,7 @@ server content 的 index `0/1/2/4/5/6` 分别为 model content、turn complete�
 | Anthropic | `POST /v1/messages`、`POST /v1/messages/count_tokens` |
 | Gemini | `GET /v1beta/models`、`GET /v1beta/models/{model}`、`POST /v1beta/models/{model}:generateContent`、`:streamGenerateContent`、`:countTokens`、`:embedContent`、`:batchEmbedContents`、`:predict`、`:predictLongRunning`、`GET /v1beta/operations/{id}`、`GET /v1beta/models/{model}/operations/{id}` |
 
-各协议输出对象的字段顺序与官方输出相同：Gemini GenerateContent、模型、计数、文件与错误对象按 Gemini API 官方响应与 proto 字段号的顺序，Chat、Responses、Anthropic 与 OpenAI 其余资源按官方文档响应示例的顺序，Interactions 为 `type` 在前、其余按字母序；顺序表由官方响应与文档生成，内嵌于 `internal/api/field_order.json`，表中没有的字段排在已知字段之后并按字母序。函数参数、元数据与 JSON Schema 等调用方数据保持原有顺序。
+各协议输出对象的字段顺序与官方输出相同：Gemini GenerateContent、模型、计数、文件与错误对象按 Gemini API 官方响应与 proto 字段号的顺序，Chat、Responses、Anthropic 与 OpenAI 其余资源按官方文档响应示例的顺序，Interactions 为 `type` 在前、其余按字母序；顺序表由官方响应与文档生成，内嵌于 `internal/api/field_order.json`，表中没有的字段排在已知字段之后并按字母序；File 与 CachedContent 资源按 proto 字段号的固定结构输出。函数参数、元数据与 JSON Schema 等调用方数据保持原有顺序。
 
 扩展端点：
 
@@ -1302,7 +1320,7 @@ server content 的 index `0/1/2/4/5/6` 分别为 model content、turn complete�
 | `AdminStatus` | `state`、`running`、`ready`、`version`、`active_requests`、`accounts`、`camoufox` |
 | `AdminAccountCounts` | `total`、`ready`、`busy`、`cooldown`、`auth_required` |
 | `AdminCamoufox` | `ready`、可选 `download`（`received`、`total`） |
-| `AdminAccount` | `id`、`label`、`enabled`、`state`、`proxy`、`locale`、`timezone`、`models`、`benefit_tier`、`message`、可选 `pairing_renewed_at` |
+| `AdminAccount` | `id`、`label`、`enabled`、`state`、`proxy`、`locale`、`timezone`、`models`、`benefit_tier`、`message`、`active_requests`、可选 `pairing_renewed_at`、可选 `transition` |
 | `AccountCreateInput` | `proxy`、`locale`、`timezone` |
 | `AccountInput` | `label`、`enabled`、`proxy`、`locale`、`timezone` |
 | `ChromeImportProfile` | `id`、`profile`、`display_name`、`email`、`locale` |
@@ -1360,7 +1378,9 @@ Chrome 导入列表按 `Preferences.account_info` 中的 Gaia ID 与邮箱逐个
 
 新增、导入、登录和验证成功后立即刷新该账户模型目录，并发布最新账户与模型事件。
 
-`PUT /api/accounts/{id}` 的提交顺序固定为：校验不可变邮箱 ID，取得账户独占租约，创建未发布的新固定出口，关闭当前 Worker 并把新 Worker 配置标记为 `pending`（尚未发布），在模型目录写锁内原子写入 `account.json` 并更新账户池，随后发布 Worker 配置、替换固定出口、释放租约并重建模型缓存。`account.json` 写入是唯一持久提交点。提交前的出口创建、Worker 关闭或写入错误会丢弃这份待发布配置并保持旧配置；已经关闭的 Worker 由后续请求按旧配置重建。持久写入后，新配置、Worker 配置与固定出口共同成为已提交状态。租约释放错误保留该提交状态并返回原始 unlock 错误；释放成功后记录完成日志并同步模型缓存。
+`PUT /api/accounts/{id}` 只切换 `enabled` 时立即写回 `account.json` 并返回，账户状态同时更新，后台收尾的阶段写在 `AdminAccount.transition`：`draining` 表示停用后等待该账户在途请求结束（`active_requests` 为等待的请求数）并关闭 Worker，`syncing` 表示启用后载入页面同步该账户的模型目录，收尾结束后字段省略；再次切换同一账户会取消进行中的收尾。
+
+其余账户更新的提交顺序固定为：校验不可变邮箱 ID，取得账户独占租约，创建未发布的新固定出口，关闭当前 Worker 并把新 Worker 配置标记为 `pending`（尚未发布），在模型目录写锁内原子写入 `account.json` 并更新账户池，随后发布 Worker 配置、替换固定出口、释放租约并重建模型缓存。`account.json` 写入是唯一持久提交点。提交前的出口创建、Worker 关闭或写入错误会丢弃这份待发布配置并保持旧配置；已经关闭的 Worker 由后续请求按旧配置重建。持久写入后，新配置、Worker 配置与固定出口共同成为已提交状态。租约释放错误保留该提交状态并返回原始 unlock 错误；释放成功后记录完成日志并同步模型缓存。
 
 `RuntimeConfig` 字段。`response-only` 表示字段由服务器填充，客户端提交的值不参与保存：
 
@@ -1373,6 +1393,7 @@ Chrome 导入列表按 `Preferences.account_info` 中的 Gaia ID 与邮箱逐个
 | `youtube_links` | 保存值；下一次启动生成服务时决定是否把用户消息文本中的 YouTube 链接作为视频外部媒体发送 |
 | `first_event_hedge` | 保存值；`off`、`auto` 或正整数秒，下一次启动生成服务时决定原请求等待首字多久后发起备用请求 |
 | `auto_start` | 保存值；下一管理进程就绪后是否自动启动生成服务 |
+| `hide_dock_icon` | 保存值；macOS 桌面版是否只在菜单栏显示图标 |
 | `request_body_log` | 保存值；保存后立即决定是否保存请求与响应正文 |
 | `admin_auth_enabled`、`admin_username` | 保存值；下一管理进程使用 |
 | `admin_password` | 只写；省略时保留现值，下一管理进程使用 |
@@ -1714,7 +1735,7 @@ message 字段为 `role`、`content`、可选 `name`、`tool_call_id`、`tool_ca
 | `input_audio` | `input_audio.data`、`input_audio.format` |
 | `refusal` | `refusal`，作为所在消息的文本 |
 
-`detail` 为 `low`、`high` 与 Responses 的 `original` 时分别设置该 Part 的 `MEDIA_RESOLUTION_LOW`、`MEDIA_RESOLUTION_HIGH`、`MEDIA_RESOLUTION_ULTRA_HIGH`，`auto` 与省略时使用模型默认分辨率；Chat 的 `detail` 位于 `image_url` 对象中。OpenAI `image_url` / `input_image` 与 `video_url` / `input_video` 值为 data URL 时形成 inline data，值为 YouTube URL 时形成 external media，Gemini Files API 文件 URI 保持文件引用，其他 http(s) URL 由服务端下载后作为内联媒体发送，其他非 data 字符串按已上传 file ID 解析。data URL 接受 Base64 与百分号编码数据，省略 MIME 时按内容判断类型，MIME 参数不发送。同一请求内相同 URL 只下载一次；下载随请求取消，大小上限与内联媒体相同（512 MiB），MIME 取响应 `Content-Type`，缺失、无法解析或为 octet-stream 时按内容判断；URL 主机或任一重定向目标解析到本机、私网、链路本地、组播或未指定地址时不连接，按下载失败处理；下载失败返回 400，错误信息包含 URL 与原因。`file_data` 接受 data URL 或 Base64 文件内容，没有声明 MIME 时按 `/v1/files` 的规则依次按文件内容与 `filename` 扩展名判断。
+`detail` 为 `low`、`high` 与 Responses 的 `original` 时分别设置该 Part 的 `MEDIA_RESOLUTION_LOW`、`MEDIA_RESOLUTION_HIGH`、`MEDIA_RESOLUTION_ULTRA_HIGH`，`auto` 与省略时使用模型默认分辨率；Chat 的 `detail` 位于 `image_url` 对象中。OpenAI `image_url` / `input_image` 与 `video_url` / `input_video` 值为 data URL 时形成 inline data，值为 YouTube URL 时形成 external media，Gemini Files API 文件 URI 保持文件引用，其他 http(s) URL 由服务端下载后作为内联媒体发送，其他非 data 字符串按已上传 file ID 解析。data URL 接受 Base64 与百分号编码数据，省略 MIME 或为 `application/octet-stream` 时按内容判断类型，MIME 参数不发送。同一请求内相同 URL 只下载一次；下载随请求取消，大小上限与内联媒体相同（512 MiB），MIME 取响应 `Content-Type`，缺失、无法解析或为 octet-stream 时按内容判断；URL 主机或任一重定向目标解析到本机、私网、链路本地、组播或未指定地址时不连接，按下载失败处理；下载失败返回 400，错误信息包含 URL 与原因。`file_data` 接受 data URL 或 Base64 文件内容，没有声明 MIME 时按 `/v1/files` 的规则依次按文件内容与 `filename` 扩展名判断。
 
 function tool 使用 `{"type":"function","function":{"name","description","parameters","strict"}}`。`strict:true` 启用参数契约校验。Google tool type 为 `web_search`、`web_search_preview`、`image_search`、`url_context`、`code_interpreter`、`google_maps`。custom tool `{"type":"custom","custom":{name,description,format}}` 声明为只有字符串参数 `input` 的函数，grammar 格式的语法与定义写入函数描述；调用以 `{"type":"custom","custom":{name,input}}` 返回，历史中的 custom 调用以 `{"input":<INPUT>}` 发送。历史函数调用的 `arguments` 不是 JSON object 时以 `{"_raw":"<原文>"}` 发送。
 
@@ -2118,6 +2139,7 @@ delta 联合类型为 `text_delta{text}`、`citations_delta{citation}`、`thinki
 | 请求设置 | `service_tier`、`labels`、`cached_content` |
 | `agent` | `model` 为空时作为模型 ID，用于 Deep Research 等代理 |
 | `agent_config` | `{type:"antigravity",model?,max_total_tokens?}`，`max_total_tokens` 为字符串或数字；`{type:"deep-research",thinking_summaries?,visualization?,collaborative_planning?}`，`thinking_summaries` 为 `auto` 或 `none`，`visualization` 为 `auto` 或 `off`；`type` 与 agent 的种类不一致或取值不在上述范围时返回 `400 INVALID_ARGUMENT` |
+| `environment` | 已有环境 ID，或 `{type:"remote",sources?,network?,environment_id?}`：`sources` 为 `[{type,source?,target?,content?,encoding?}]`，`type` 取 `gcs`、`inline`、`repository`；`network` 为 `"disabled"` 或 `{allowlist}`，`allowlist` 为 `"disabled"` 或 `[{domain,transform?,credential?}]`，`transform` 为注入匹配请求的请求头 |
 | 续接 | `previous_interaction_id`、`store` |
 
 - 媒体内容的 `data` 与 `uri` 二选一，复用 Gemini 文件与内联媒体解析：省略 `mime_type` 时内联数据按内容识别类型，无法识别时返回 `400 INVALID_ARGUMENT`；`uri` 为外部 http(s) URL 时由服务下载为内联媒体，规则与 GenerateContent 的 `fileData` 相同；本服务 Gemini 文件接口返回的 `uri` 作为文件引用
@@ -2136,7 +2158,7 @@ delta 联合类型为 `text_delta{text}`、`citations_delta{citation}`、`thinki
 
 `webhook_config:{uris,user_metadata}` 随 `background:true` 使用，否则返回 `400 INVALID_ARGUMENT`，`uris` 为 http 或 https 地址。后台交互结束时服务向每个地址 POST `{type,version:"v1",timestamp,data:{id},user_metadata}`，请求头带 `webhook-id` 与 `webhook-timestamp`：`type` 按终态为 `interaction.completed`（含 `incomplete`）、`interaction.requires_action`、`interaction.failed`（`data` 另有 `error_code` 与 `error_message`）或 `interaction.cancelled`；应答不是 2xx 或 10 秒内没有应答时，从 1 秒起按倍数退避（间隔最长 1 小时）重试 24 小时。
 
-非流式响应包含 `id`、`object:"interaction"`、`model`、`created`、`updated`、`status`、`steps` 与 `usage`，以 `previous_interaction_id` 续接时同时带该字段。`steps` 的 `model_output.content` 保存文本或媒体，带引用的文本内容含 `annotations`，每项为 `{type:"url_citation",url,title,start_index,end_index}`，下标为该段文本中的字节位置；音频位于 `{type:"audio",data,mime_type,sample_rate,channels}`；SDK 的 `output_audio` 与 `output_text` 从这些步骤读取。正文、图片与函数调用携带的思考签名作为其前 `thought` 步骤的 `signature` 输出，按步骤回传时签名回到其后第一个模型 Part。函数调用作为 `function_call` 步骤返回，状态为 `requires_action`；正常生成与命中停止序列的状态为 `completed`，输出限额与内容拦截的状态为 `incomplete`。`usage` 包含 `total_input_tokens`、`total_cached_tokens`、`total_output_tokens`、`total_thought_tokens`、`total_tool_use_tokens` 与 `total_tokens`；上游给出模态细分时另有 `input_tokens_by_modality`、`cached_tokens_by_modality`、`output_tokens_by_modality`、`tool_use_tokens_by_modality`，元素为 `{modality,tokens}`，`modality` 为小写模态名；使用 Google Search 或 Google Maps 时 `grounding_tool_count` 按 `{type:"google_search"|"google_maps",count}` 给出调用次数。
+非流式响应包含 `id`、`object:"interaction"`、`model`、`created`、`updated`、`status`、`steps` 与 `usage`，以 `previous_interaction_id` 续接时同时带该字段，agent 运行结束时上游给出远程环境时带 `environment_id`。`steps` 的 `model_output.content` 保存文本或媒体，带引用的文本内容含 `annotations`，每项为 `{type:"url_citation",url,title,start_index,end_index}`，下标为该段文本中的字节位置；音频位于 `{type:"audio",data,mime_type,sample_rate,channels}`；SDK 的 `output_audio` 与 `output_text` 从这些步骤读取。正文、图片与函数调用携带的思考签名作为其前 `thought` 步骤的 `signature` 输出，按步骤回传时签名回到其后第一个模型 Part。函数调用作为 `function_call` 步骤返回，状态为 `requires_action`；正常生成与命中停止序列的状态为 `completed`，输出限额与内容拦截的状态为 `incomplete`。`usage` 包含 `total_input_tokens`、`total_cached_tokens`、`total_output_tokens`、`total_thought_tokens`、`total_tool_use_tokens` 与 `total_tokens`；上游给出模态细分时另有 `input_tokens_by_modality`、`cached_tokens_by_modality`、`output_tokens_by_modality`、`tool_use_tokens_by_modality`，元素为 `{modality,tokens}`，`modality` 为小写模态名；使用 Google Search 或 Google Maps 时 `grounding_tool_count` 按 `{type:"google_search"|"google_maps",count}` 给出调用次数。
 
 SSE 使用相同的事件名与 JSON `event_type`：`interaction.created` → `step.start` → `step.delta` → `step.stop` → `interaction.completed`。`background:true` 的流式与后台生成写入事件记录，每个事件带从 1 递增的 `event_id`；客户端断开后生成继续，`GET` 带 `stream=true` 与 `last_event_id` 从下一个事件继续读取。步骤以 `index` 对应，引用在其所在文本之后以 `{type:"text_annotation_delta",annotations}` 增量输出，音频增量为 `{type:"audio",data,mime_type,sample_rate,channels}`。10 秒无语义事件时发送 `: ping`，上游错误或缺失终态发送 `error` 事件并结束；客户端断开会取消上游生成。流开始前使用 Gemini HTTP 错误对象。
 
@@ -2342,7 +2364,7 @@ tool group 字段：
 
 ### Files、Transcribe 与媒体
 
-`POST /v1/files` 接受 multipart `file` 与可选 `purpose`，两者可以按任意顺序到达。文件上限 512 MiB，请求额外允许 1 MiB multipart overhead；普通 scalar part 上限 64 KiB。filename 与非空 file 必需；`purpose` 省略或为空时为 `user_data`。Content-Type 为空、无效、不含子类型或为 `application/octet-stream` 时从文件前缀检测不带参数的 MIME，Ogg 前缀记为 `audio/ogg`，WAV 前缀记为 `audio/wav`；前缀无法识别时依次按 FLAC 头、MPEG 音频帧头与扩展名（flac、mp3、mp4、mpeg、mpga、m4a、ogg、wav、webm，其余扩展名查系统 MIME 表）确定。`/v1/files` 与 `/upload/v1beta/files` 收到的 GIF 按首帧画在逻辑画布尺寸的白底上，编码为质量 92 的 JPEG 后保存，文件名不变，MIME 为 `image/jpeg`。
+`POST /v1/files` 接受 multipart `file`、可选的 `purpose` 与 `expires_after[anchor]`、`expires_after[seconds]`，各段可以按任意顺序到达，同名字段以先出现的为准。文件上限 512 MiB，请求额外允许 1 MiB multipart overhead；普通 scalar part 上限 64 KiB。filename 与非空 file 必需；`purpose` 省略或为空时为 `user_data`。`expires_after[anchor]` 只接受 `created_at`，`expires_after[seconds]` 为 3600–2592000 的整数，文件在上传后经过该秒数到期；省略 `expires_after` 时 `purpose` 为 `batch` 的文件 30 天后到期，其余文件不到期。两个字段无效时返回 400 `invalid_request_error`，文件不保存。到期的文件由到期资源回收删除（见“账户持久状态”节）。Content-Type 为空、无效、不含子类型或为 `application/octet-stream` 时从文件前缀检测不带参数的 MIME，Ogg 前缀记为 `audio/ogg`，WAV 前缀记为 `audio/wav`；前缀无法识别时依次按 FLAC 头、MPEG 音频帧头与扩展名（flac、mp3、mp4、mpeg、mpga、m4a、ogg、wav、webm，其余扩展名查系统 MIME 表）确定。`/v1/files` 与 `/upload/v1beta/files` 收到的 GIF 按首帧画在逻辑画布尺寸的白底上，编码为质量 92 的 JPEG 后保存，文件名不变，MIME 为 `image/jpeg`。
 
 File object：
 
@@ -2352,13 +2374,14 @@ File object：
   "object": "file",
   "bytes": 1234,
   "created_at": 0,
+  "expires_at": null,
   "filename": "document.pdf",
   "purpose": "assistants",
   "status": "processed"
 }
 ```
 
-`POST /v1/files` 与 `GET /v1/files/{id}` 返回该对象。`GET /v1/files/{id}/content` 返回原始 body，并设置 `Content-Type`、attachment `Content-Disposition` 和已知时的 `Content-Length`。`DELETE /v1/files/{id}` 返回：
+`expires_at` 为到期时间的 Unix 秒数，不到期时为 null。`POST /v1/files` 与 `GET /v1/files/{id}` 返回该对象。`GET /v1/files/{id}/content` 返回原始 body，并设置 `Content-Type`、attachment `Content-Disposition` 和已知时的 `Content-Length`。`DELETE /v1/files/{id}` 返回：
 
 ```json
 {"id":"file_...","object":"file","deleted":true}
@@ -2372,7 +2395,7 @@ File object：
 
 `POST /upload/v1beta/files` 按 `X-Goog-Upload-Protocol` 或 `uploadType` 接受 `resumable` 与 `multipart`。可续传上传先发送 `X-Goog-Upload-Command: start`，请求体为可选的 `{file:{name?,displayName?,mimeType?}}`（接受 `display_name` 与单引号字符串），`X-Goog-Upload-Header-Content-Type` 声明类型，响应头 `X-Goog-Upload-URL` 给出上传地址；分块以 `X-Goog-Upload-Command: upload` 或 `upload, finalize` 与 `X-Goog-Upload-Offset` 发往该地址，偏移与已接收字节数不符时返回 400，`query` 返回 `X-Goog-Upload-Size-Received`，`cancel` 结束上传；地址闲置 1 小时后失效。multipart 请求体由可省略的 JSON 元数据段与文件段组成，`multipart/related` 与 `multipart/form-data` 均可。显示名依次取 `displayName`、文件段的 filename 与 `X-Goog-Upload-File-Name`，均缺失时为 `file`；类型依次取文件段 `Content-Type`、`X-Goog-Upload-Header-Content-Type`、`mimeType`，均缺失或为 `application/octet-stream` 时按内容识别。完成时返回 `{file:File}` 与 `X-Goog-Upload-Status: final`。
 
-File 为 `{name:"files/<id>",displayName,mimeType,sizeBytes,createTime,updateTime,uri,state:"ACTIVE",source:"UPLOADED",sha256Hash?,videoMetadata?}`，`uri` 为 `https://generativelanguage.googleapis.com/v1beta/files/<id>`，可直接用作 `fileData.fileUri` 与 Interactions 媒体内容的 `uri`。`sha256Hash` 为上传时计算的文件内容 SHA-256 的 Base64；MP4 与 QuickTime 视频带 `videoMetadata:{videoDuration}`，例如 `"4s"`。`GET /v1beta/files/{id}` 返回 File，`DELETE /v1beta/files/{id}` 返回 `{}`，未知文件返回 404 `NOT_FOUND`。`GET /v1beta/files` 按创建时间从新到旧返回 `{files,nextPageToken?}`，`pageSize` 默认 10、最大 100，`pageToken` 取上一页的 `nextPageToken`。Gemini 文件与 `/v1/files` 共用存储、512 MiB 上限与 Drive 账户绑定。
+File 为 `{name:"files/<id>",displayName,mimeType,sizeBytes,createTime,updateTime,expirationTime,uri,state:"ACTIVE",source:"UPLOADED",sha256Hash?,videoMetadata?}`，`expirationTime` 为 `createTime` 之后 48 小时，到期的文件由到期资源回收删除；`uri` 为 `https://generativelanguage.googleapis.com/v1beta/files/<id>`，可直接用作 `fileData.fileUri` 与 Interactions 媒体内容的 `uri`。`sha256Hash` 为上传时计算的文件内容 SHA-256 的 Base64；MP4 与 QuickTime 视频带 `videoMetadata:{videoDuration}`，例如 `"4s"`。`GET /v1beta/files/{id}` 返回 File，`DELETE /v1beta/files/{id}` 返回 `{}`，未知文件返回 404 `NOT_FOUND`。`GET /v1beta/files` 按创建时间从新到旧返回 `{files,nextPageToken?}`，`pageSize` 默认 10、最大 100，`pageToken` 取上一页的 `nextPageToken`。Gemini 文件与 `/v1/files` 共用存储、512 MiB 上限与 Drive 账户绑定。
 
 元数据的 `file.name` 指定文件 ID，形如 `files/<id>`，`<id>` 为 1–40 个小写字母、数字或 `-`，首尾不能为 `-`；格式无效返回 `400 INVALID_ARGUMENT`。ID 已属于另一个文件时，multipart 上传与可续传上传的完成请求返回 `409 ALREADY_EXISTS`，消息为 `<id> already exists.`，可续传上传的开始请求照常返回上传地址。未指定时由服务分配 ID，分配的 ID 长于 40 个字符。指定的 ID 用于读取、下载、删除与 `fileData.fileUri`。
 
@@ -2391,7 +2414,7 @@ File 为 `{name:"files/<id>",displayName,mimeType,sizeBytes,createTime,updateTim
 | `stream` | `true` 时以 SSE 返回 |
 | `prompt` | 当前 wire 无对应字段，忽略 |
 
-`smart_transcription=true` 与显式 true 的 word timestamps 或 speaker labels 互斥，custom vocabulary 与 word timestamps 互斥，冲突组合返回 `400 invalid_request`。每次账户尝试创建临时 Drive file，生成结束、失败或取消后在同账户清理。
+`smart_transcription=true` 与显式 true 的 word timestamps 或 speaker labels 互斥，custom vocabulary 与 word timestamps 互斥，冲突组合返回 `400 invalid_request`。每次账户尝试创建临时 Drive file，生成结束、失败或取消后在同账户删除；临时文件的绑定不带 purpose，不出现在文件接口中，带自上传起 48 小时的 `expires_at`，服务在请求进行中退出时由到期资源回收删除。
 
 `text` 格式返回 `text/plain; charset=utf-8`。`srt` 与 `vtt` 按 `segments` 每段生成一条字幕，分别返回 `text/plain; charset=utf-8` 与 `text/vtt; charset=utf-8`。`srt`、`vtt`、`verbose_json` 与 `diarized_json` 在未设置 `word_timestamps`、`smart_transcription` 不为 `true` 且没有 `custom_vocabulary` 时请求词级时间戳；`diarized_json` 在未设置 `speaker_labels` 且 `smart_transcription` 不为 `true` 时请求说话人。`json` 返回 `{"text","usage"?}`，`usage` 为 `{"type":"tokens","input_tokens","output_tokens","total_tokens","input_token_details"?:{"audio_tokens","text_tokens"}}`，上游没有用量时省略。`verbose_json`：
 
@@ -2423,7 +2446,7 @@ File 为 `{name:"files/<id>",displayName,mimeType,sizeBytes,createTime,updateTim
 | `size` | `auto` 或 `WIDTHxHEIGHT`，为输出图片尺寸 |
 | `quality` | `auto`、`low/standard=1K`、`medium/hd=2K`、`high/xhigh/max=4K` |
 | `output_format` | `png`（默认）、`jpeg`（也接受 `jpg`）或 `webp` |
-| `output_compression` | 0–100，默认 100，为 JPEG 质量 |
+| `output_compression` | 0–100，默认 100，为 JPEG 与 WebP 的编码质量 |
 | `response_format` | `url` 返回 data URL；省略或其他值返回 Base64 `b64_json` |
 | `stream` | boolean |
 | `safety_identifier`、`user` | 响应回传 `safety_identifier`，为空时回传 `user` |
@@ -2432,11 +2455,12 @@ File 为 `{name:"files/<id>",displayName,mimeType,sizeBytes,createTime,updateTim
 - 每张图片单独生成，按序合并到 `data`
 - `size` 取模型 `image_aspect_ratios` 中比值最接近的宽高比，目录未列出时在 1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9 中选择；分辨率取 `image_output_resolutions` 中能覆盖 `size` 的最小一档（按与 `size` 等面积的正方形边长比较，512、1K、2K、4K 依次为 512、1024、2048、4096），超过全部档位时取最大一档
 - 模型列出 `image_output_resolutions` 时，`quality` 取其中最接近的分辨率；它高于 `size` 对应的分辨率时按 `quality` 生成
-- 生成的图片从中央取与 `size` 同宽高比的最大区域，缩放为 `size`；生成的图片任一边小于 `size`、或 `size` 为 `auto` 与省略时保持生成尺寸
-- 输出按 `output_format` 编码，WebP 为无损编码
+- 上游以 JPEG 返回生成的图片，请求只指定宽高比与分辨率，与官网运行设置的 Aspect ratio 与 Resolution 相同
+- 生成的图片从中央取与 `size` 同宽高比的最大区域，缩放为 `size`；生成的图片任一边小于 `size`、或 `size` 为 `auto` 与省略时保持生成尺寸；不需要缩放、`output_format` 为 `jpeg` 且 `output_compression` 为 100 时原样返回上游图片
+- 输出按 `output_format` 编码：PNG 为 8 位 RGB，WebP 为质量取 `output_compression` 的有损编码
 - `stream:true` 时以 SSE 返回，每张图片一个 `image_generation.completed` 事件
 
-响应为 `{"created":<UNIX>,"background":"opaque","data":[{"b64_json":"...","revised_prompt":"..."}],"output_format","quality","size","usage","safety_identifier"?}`，`response_format` 为 `url` 时 `data` 项为 `{"url":"data:<MIME>;base64,...","revised_prompt":"..."}`。`size` 为输出图片的实际宽高；`quality` 为请求的 `low`、`medium`、`high`、`xhigh` 或 `max`，其余按生成分辨率记为 `low`（512、1K）、`medium`（2K）或 `high`（4K）；`usage` 为各张图片上游用量的合计 `{input_tokens,input_tokens_details:{text_tokens,image_tokens},output_tokens,output_tokens_details:{text_tokens,image_tokens},total_tokens}`，图片 token 取上游按模态细分的 `IMAGE` 项。`revised_prompt` 只在上游同时返回文本时出现。任一张未返回最终图片时返回 HTTP 502 `upstream_error`，结束原因不是正常结束时写入错误消息，例如 `image_recitation`；其他生成错误按该错误返回，不返回部分结果。流式事件为 `{"type":"image_generation.completed","b64_json","usage","background","created_at","output_format","quality","safety_identifier"?,"size"}`，`size` 为该张图片的实际宽高，`usage` 为该张图片的上游用量，在全部图片生成后依次发送，不发送 partial image 事件；生成失败时按非流式返回错误。
+响应为 `{"created":<UNIX>,"background":"opaque","data":[{"b64_json":"...","revised_prompt":"..."}],"output_format","quality","size","usage","safety_identifier"?}`，`response_format` 为 `url` 时 `data` 项为 `{"url":"data:<MIME>;base64,...","revised_prompt":"..."}`。`size` 为输出图片的实际宽高；`quality` 为请求的 `low`、`medium`、`high`、`xhigh` 或 `max`，其余按生成分辨率记为 `low`（512、1K）、`medium`（2K）或 `high`（4K）；`usage` 为各张图片上游用量的合计 `{input_tokens,input_tokens_details:{text_tokens,image_tokens},output_tokens,output_tokens_details:{text_tokens,image_tokens},total_tokens}`，文本与图片 token 分别取上游按模态细分的 `TEXT` 与 `IMAGE` 项，上游没有给出该模态时为 0。`revised_prompt` 只在上游同时返回文本时出现。任一张未返回最终图片时返回 HTTP 502 `upstream_error`，结束原因不是正常结束时写入错误消息，例如 `image_recitation`；其他生成错误按该错误返回，不返回部分结果。流式事件为 `{"type":"image_generation.completed","b64_json","usage","background","created_at","output_format","quality","safety_identifier"?,"size"}`，`size` 为该张图片的实际宽高，`usage` 为该张图片的上游用量，在全部图片生成后依次发送，不发送 partial image 事件；生成失败时按非流式返回错误。
 
 `POST /v1/images/edits` 接受 multipart 的 `image` 或 `image[]`（一个或多个文件）、`prompt`、`mask`，以及与图片生成相同的 `model`、`n`、`size`、`quality`、`output_format`、`output_compression`、`response_format`、`stream`、`safety_identifier`、`user`，响应格式也相同，流式事件类型为 `image_edit.completed`。输入图片按顺序作为参考图写在提示词之前；分段 Content-Type 缺失或为 `application/octet-stream` 时按内容识别，GIF 取首帧转为 PNG。`mask` 中完全透明的像素转为白色、其余为黑色，生成 PNG 遮罩，放在输入图片之后，并附说明“白色为编辑区域、黑色保持不变”。`background`、`input_fidelity`、`partial_images` 没有上游对应项，不影响请求。缺少图片或提示词、遮罩无法解码时返回 400。
 
@@ -2516,7 +2540,7 @@ OpenAI video object：
 }
 ```
 
-`prompt` 为创建任务时的提示词，`completed_at` 为结果视频登记时的 Unix 秒数，未完成时为 null；`expires_at` 与 `remixed_from_video_id` 为 null，`error` 在失败时为错误对象，其余为 null。`GET /v1/videos/{id}` 返回当前对象。完成时 status 为 `completed`、progress 为 `100`；服务重启前没有生成完成的任务按本地记录返回 status 为 `failed`、progress 为 `100` 的对象，并带 `error:{"code":"video_not_found","message":"服务重启前任务没有生成完成"}`。`GET /v1/videos/{id}/content` 接受省略或 `variant=video`，未完成时返回 409 `video_not_ready`；成功下载设置媒体 `Content-Type`、`attachment; filename="video.mp4"` 和已知的 `Content-Length`。
+`prompt` 为创建任务时的提示词，`completed_at` 为结果视频登记时的 Unix 秒数，未完成时为 null；`expires_at` 为 `completed_at` 之后 48 小时的 Unix 秒数，未完成时为 null，到期的结果视频与任务由到期资源回收删除（见“账户持久状态”节）；`remixed_from_video_id` 为 null，`error` 在失败时为错误对象，其余为 null。`GET /v1/videos/{id}` 返回当前对象。完成时 status 为 `completed`、progress 为 `100`；服务重启前没有生成完成的任务按本地记录返回 status 为 `failed`、progress 为 `100` 的对象，并带 `error:{"code":"video_not_found","message":"服务重启前任务没有生成完成"}`。`GET /v1/videos/{id}/content` 接受省略或 `variant=video`，未完成时返回 409 `video_not_ready`，结果视频已从 Drive 删除时返回 404 `video_not_found`；成功下载设置媒体 `Content-Type`、`attachment; filename="video.mp4"` 和已知的 `Content-Length`。
 
 `GET /v1/videos` 从资源绑定列出视频，按创建时间从新到旧返回 `{"object":"list","data":[video object],"first_id","last_id","has_more"}`。`order` 为 `asc` 或 `desc`（默认），`after` 为上一页最后一个视频 ID，`limit` 为 0–100、默认 20。页内每个视频给出与 `GET /v1/videos/{id}` 相同的对象；读取任务状态失败时返回该错误。`DELETE /v1/videos/{id}` 先读取任务状态：已完成的删除 Drive 结果文件，并解除结果文件与任务的绑定；失败的只解除任务绑定；都返回 `{"id","object":"video.deleted","deleted":true}`。未结束的任务返回 409 `video_not_ready`。未知或已删除的视频在查询、下载与删除时都返回 404 `video_not_found`。
 
@@ -2582,6 +2606,7 @@ Gemini `:predictLongRunning` 请求：
 
 - 宽高比与分辨率换成模型选项中最接近的取值，时长换成 `video_duration_range` 范围内的秒数
 - 按输入核对模型目录的 `video_tasks`：有参考图时为 `reference_to_video`，只有起始图时为 `image_to_video`，没有图片时为 `text_to_video`，目录没有列出该任务时返回 400；请求带参考图或起始图任务，文字生成视频以及提示词为空、只有图片时与官网一样不带任务；图片在提示词之前，提示词为空时内容只有图片；反向提示词以 `\n\nNegative prompt: <文本>` 附加在提示词末尾；尾帧返回 400
+- 内联图片与其他账户的文件引用上传到生成账户的 Drive，文件名为 `<任务 ID>-image-<序号>`，purpose 为 `assistants`，带自上传起 48 小时的 `expires_at`，生成结束后删除，服务在生成进行中退出时由到期资源回收删除；生成账户自己的文件引用直接使用
 - 生成的 MP4 上传到创建账户的 Drive，以官网视频页的文件名绑定为任务结果，查询、下载、列出与删除见上文
 - 请求没有指定账户时，生成账户在冷却中或上游返回 401、403、429 与 5xx 时换另一个能运行该模型的账户重新生成，图片输入重新上传到该账户，任务与结果仍属于创建账户；指定账户时以该错误结束
 - 生成失败时 Gemini operation 为 `done` 并带 `error:{code,message,status}`，OpenAI 对象 status 为 `failed` 并带 `error:{"code":"video_generation_failed","message"}`
@@ -2665,7 +2690,7 @@ setup 之后的客户端对象统一字段为 `type`、可选 `text`、`mime_typ
 | Anthropic | `message_start` | `content_block_start`、delta、`content_block_stop` | `message_delta.usage` | `message_stop` |
 | Gemini | candidate Part | `GenerateContentResponse` 增量 | 最后一帧 `usageMetadata` | 最后一帧 finish reason |
 
-上游语义事件间隔达到 10 秒时，OpenAI 两种协议发送 SSE 注释帧 `: ping`，Anthropic 发送 `ping` 事件，Gemini SSE 发送空行，均立即 flush。OpenAI Chat 先发送 assistant role chunk，Responses 先发送 `response.created` 与 `response.in_progress`，Anthropic 先发送 `message_start`；这些起始事件在账户调度期间即可到达客户端。Gemini 的首个帧来自上游语义事件或保活空行。
+流式响应距上一次写出满 10 秒时，OpenAI 各接口与 Interactions 发送 SSE 注释帧 `: ping`，Responses 写出开场事件后重发序号为 1 的 `response.in_progress` 事件，Anthropic 发送 `ping` 事件，Gemini SSE 发送空行，均立即 flush；流式响应头带 `X-Accel-Buffering: no`，经 nginx 反向代理时逐帧转发。图片与转写的流式请求在首个结果晚于 10 秒时先由心跳写出响应头，之后的错误以 SSE 错误事件返回。OpenAI Chat 先发送 assistant role chunk，Responses 先发送 `response.created` 与 `response.in_progress`，Anthropic 先发送 `message_start`；这些起始事件在账户调度期间即可到达客户端。Gemini 的首个帧来自上游语义事件或保活空行。
 
 公开适配规则：
 
@@ -2682,9 +2707,9 @@ setup 之后的客户端对象统一字段为 `type`、可选 `text`、`mime_typ
 
 Responses 媒体使用 image generation item。
 
-OpenAI Chat 使用 Markdown 图片承载生成图片，`MEDIA_OUTPUT=inline` 时为 data URL，`url` 时为本服务的 `/media/<文件名>` URL；客户端把 assistant `message.content` 回传下一轮时，适配器将其中的 data URL 图片与本服务已保存的媒体 URL 图片恢复为 inline data Part，保留图片多轮上下文。`GET /media/<文件名>` 返回保存的媒体，不校验 API key，响应带 immutable 缓存头。图片 Base64 支持标准与 URL-safe 字母表、可选填充及 CR/LF 换行；图片前后的文本保持原顺序。
+OpenAI Chat 使用 Markdown 图片承载生成图片，`MEDIA_OUTPUT=inline` 时为 data URL，`url` 时为本服务的 `/media/<文件名>` URL；客户端把 assistant `message.content` 回传下一轮时，适配器将其中的 data URL 图片与本服务已保存的媒体 URL 图片恢复为 inline data Part，保留图片多轮上下文。`GET /media/<文件名>` 返回保存的媒体，不校验 API key，响应带 immutable 缓存头。媒体目录在服务启动时与写入新文件后按总量 1 GB 回收，从最久未使用的文件开始删除；写入同一内容、读取与对话回传都刷新使用时间，已删除的文件返回 404，回传中指向它的链接保留为文本。图片 Base64 支持标准与 URL-safe 字母表、可选填充及 CR/LF 换行；图片前后的文本保持原顺序。
 
-`YOUTUBE_LINKS=true` 时，用户文本中的 `youtu.be/<ID>`、`youtube.com/watch?v=<ID>`、`/shorts/<ID>`、`/live/<ID>` 和 `/embed/<ID>` 会转换为 `video/*` 外部媒体 part，并从用户 text part 中移除；重复 URL 合并为一个附件。OpenAI `video_url`/`input_video`、Anthropic URL source 与 Gemini `fileData.fileUri` 使用相同的外部媒体编码。
+`YOUTUBE_LINKS=true` 时，用户文本中的 `youtu.be/<ID>`、`youtube.com/watch?v=<ID>`、`/shorts/<ID>`、`/live/<ID>` 和 `/embed/<ID>` 会转换为 `video/*` 外部媒体 part，并从用户 text part 中移除；重复 URL 合并为一个附件。文本中的链接由 ASCII URL 字符组成，遇到空白、引号、尖括号、反引号与非 ASCII 字符结束；`<ID>` 为 11 位字母、数字、`-` 与 `_`，不符合的链接保留为文本。OpenAI `video_url`/`input_video`、Anthropic URL source 与 Gemini `fileData.fileUri` 使用相同的外部媒体编码。
 
 OpenAI Responses 的 `previous_response_id` 与 Interactions 的 `previous_interaction_id` 共用最多 256 个响应节点并重建完整 contents，已结束的节点保存在 `runtime/states.db`，服务重启后仍可续接。Drive 与视频资源绑定持久化到磁盘。
 
@@ -2715,13 +2740,14 @@ Gemini 列中注明状态码的行以该状态码返回；Interactions 路由与
 | 视频仍在生成 | 409 | `video_not_ready` | `api_error` | `INTERNAL` |
 | 文件超过 512 MiB | 413 | `file_too_large` | `request_too_large` | `INTERNAL` |
 | 上游配额或限流（上游给出重试时长时带 `Retry-After`，Gemini 错误体带 `RetryInfo`） | 429 | `rate_limit_exceeded` | `rate_limit_error` | `RESOURCE_EXHAUSTED` |
-| 候选账户均在冷却且 1 分钟内不恢复（带 `Retry-After`，Gemini 错误体带 `RetryInfo`） | 429 | `rate_limit_exceeded` | `rate_limit_error` | `RESOURCE_EXHAUSTED` |
+| 候选账户均在冷却且 1 分钟内不恢复（套餐限额与每日限额冷却中的账户先发送一次，上游仍拒绝时返回该拒绝；带 `Retry-After`，Gemini 错误体带 `RetryInfo`） | 429 | `rate_limit_exceeded` | `rate_limit_error` | `RESOURCE_EXHAUSTED` |
 | 上游过载 | 529 | `upstream_error` | `overloaded_error` | `INTERNAL` |
 | 当前客户端请求被管理端取消 | 503 | `request_canceled` | `api_error` | `UNAVAILABLE` |
 | 生成服务已停止 | 503 | `service_stopped` | `api_error` | `UNAVAILABLE` |
 | 生成服务正在启动且模型目录尚未就绪 | 503 | `service_starting` | `api_error` | `UNAVAILABLE` |
 | 请求期限到期 | 504 | `upstream_error` | `timeout_error` | `DEADLINE_EXCEEDED` |
 | 传输、Content-Type、解码或缺失终态 | 502 | `upstream_error` | `api_error` | `INTERNAL` |
+| 上游以内容策略类原因结束生成 | 502 | `upstream_error` | `api_error` | `INTERNAL` |
 
 - “没有符合条件的账户”指候选耗尽且没有符合方法与能力的账户
 - 权益不满足时错误消息写明模型需要的权益：`1` 为付费 API key，`3` 为 Google AI Pro 或 Ultra 订阅，`4` 为 Google AI Ultra 订阅

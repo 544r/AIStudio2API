@@ -461,6 +461,23 @@ func (manager *accountWorkerManager) stopAccountWorker(account *accountWorker) e
 	return nil
 }
 
+// MergeCookies 把账户在页面之外取得的响应 Cookie 写入账户当前 Worker 的页面，没有 Worker 时直接返回
+func (manager *accountWorkerManager) MergeCookies(ctx context.Context, accountID string, headers []string, requestURL string) error {
+	manager.mu.RLock()
+	account := manager.accounts[accountID]
+	manager.mu.RUnlock()
+	if account == nil {
+		return nil
+	}
+	account.mu.Lock()
+	worker := account.worker
+	account.mu.Unlock()
+	if worker == nil {
+		return nil
+	}
+	return worker.MergeSetCookieHeaders(ctx, headers, requestURL)
+}
+
 // WorkerGeneration 返回账户当前 Worker 版本号
 func (manager *accountWorkerManager) WorkerGeneration(accountID string) uint64 {
 	manager.mu.RLock()
@@ -857,12 +874,23 @@ func (manager *accountWorkerManager) waitOpening(ctx context.Context, accountID 
 	if opening == nil {
 		return nil
 	}
+	endWait := beginOpeningWait(ctx)
+	defer endWait()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-opening:
 		return nil
 	}
+}
+
+// beginOpeningWait 把 ctx 中的账户租约标记为等待 Worker 启动占位，让启动中的认证续签不等待它，ctx 没有租约时为空操作
+func beginOpeningWait(ctx context.Context) func() {
+	lease, ok := aistudio.AccountLeaseFromContext(ctx)
+	if !ok {
+		return func() {}
+	}
+	return lease.BeginOpeningWait()
 }
 
 // residentWorker 返回账户已就绪的常驻 Worker，没有时返回 nil
@@ -1076,13 +1104,20 @@ func (manager *accountWorkerManager) startReservedWorker(
 		account.startupMu.Unlock()
 		return nil, err
 	}
-	manager.requests.log(label, "INFO", "WAA Worker 启动 | 1/7 | 初始化页面 | 页面模型="+bootstrapModel)
+	reload, _ := ctx.Value(workerReloadKey{}).(bool)
+	logStep := func(step int, message string) {
+		if reload {
+			manager.requests.log(label, "INFO", "WAA Worker 启动 | 重新载入 | "+message)
+			return
+		}
+		manager.requests.log(label, "INFO", fmt.Sprintf("WAA Worker 启动 | %d/7 | %s", step, message))
+	}
+	logStep(1, "初始化页面 | 页面模型="+bootstrapModel)
 	initCtx, cancel := context.WithTimeout(ctx, manager.initTimeout)
 	options.Model = bootstrapModel
 	launched, _ := ctx.Value(browserLaunchedKey{}).(func())
 	options.StartupProgress = func(stage camoufoxnative.StartupStage) {
-		step, message := workerStartupProgress(stage)
-		manager.requests.log(label, "INFO", fmt.Sprintf("WAA Worker 启动 | %d/7 | %s", step, message))
+		logStep(workerStartupProgress(stage))
 		if (stage == camoufoxnative.StartupConnectingBiDi || stage == camoufoxnative.StartupLoadingAIStudio) && launched != nil {
 			launched()
 		}
@@ -1106,6 +1141,10 @@ func (manager *accountWorkerManager) startReservedWorker(
 				bootstrapModel, time.Since(startedAt).Round(time.Millisecond),
 			))
 			return nil, err
+		}
+		if manager.refresher != nil && !reload && aistudio.DefinitiveAuthenticationFailure(initErr) {
+			manager.requests.log(label, "INFO", "WAA Worker 启动 | 登录态失效，账户认证续签 | 错误="+strings.TrimSpace(initErr.Error()))
+			return nil, &accountWorkerInitError{err: initErr, proxy: options.Proxy}
 		}
 		manager.requests.log(label, "ERROR", fmt.Sprintf(
 			"WAA Worker 启动失败 | 页面模型=%s | 耗时=%s | 错误=%s",
@@ -1312,7 +1351,7 @@ func (manager *accountWorkerManager) evictIdleWorker(ctx context.Context, accoun
 	return true, errors.Join(resetErr, releaseErr)
 }
 
-// ensureWorker 返回账户就绪的 Worker，没有时在峰值上限内启动，满额时替换空闲的其他账户 Worker；warmOnly 为 true 时只在常驻名额未满时启动，不替换其他账户的 Worker
+// ensureWorker 返回账户就绪的 Worker，没有时在峰值上限内启动，满额时替换空闲的其他账户 Worker；warmOnly 为 true 时只在常驻名额未满时启动，不替换其他账户的 Worker；ctx 没有账户租约时先取得同一账户的租约
 func (manager *accountWorkerManager) ensureWorker(
 	ctx context.Context,
 	accountID string,
@@ -1331,6 +1370,14 @@ func (manager *accountWorkerManager) ensureWorker(
 	if err != nil {
 		return nil, err
 	}
+	if _, leased := aistudio.AccountLeaseFromContext(ctx); !leased {
+		lease, err := manager.pool.AcquireFor(ctx, aistudio.AccountSelection{AccountID: accountID})
+		if err != nil {
+			return nil, err
+		}
+		defer lease.Release()
+		ctx = aistudio.ContextWithAccountLease(ctx, lease)
+	}
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1341,10 +1388,13 @@ func (manager *accountWorkerManager) ensureWorker(
 			if !waitForOpening {
 				return nil, errAccountWorkerOpening
 			}
+			endWait := beginOpeningWait(ctx)
 			select {
 			case <-ctx.Done():
+				endWait()
 				return nil, ctx.Err()
 			case <-opening:
+				endWait()
 				continue
 			}
 		}
@@ -1512,6 +1562,12 @@ func (manager *accountWorkerManager) detachStartup(
 	}
 }
 
+// workerReloadKey 标记认证恢复后的重新载入，进度并入同一条启动日志
+type workerReloadKey struct{}
+
+// workerStartupRenewalKey 标记 Worker 启动中的认证续签，结果由启动日志报告
+type workerStartupRenewalKey struct{}
+
 // startAuthenticatedWorker 在启动锁释放后恢复同一账户的认证
 func (manager *accountWorkerManager) startAuthenticatedWorker(ctx context.Context, accountID, model string) (*accountWorkerPreparer, error) {
 	lease, leased := aistudio.AccountLeaseFromContext(ctx)
@@ -1528,19 +1584,29 @@ func (manager *accountWorkerManager) startAuthenticatedWorker(ctx context.Contex
 		return nil, busyErr
 	}
 	generation := lease.AuthGeneration()
-	worker, err := manager.startReservedWorker(ctx, accountID, model)
+	var worker *accountWorkerPreparer
+	var err error
+	if manager.refresher != nil {
+		err = manager.refresher.ensureBound(ctx)
+	}
+	started := err == nil
+	if started {
+		worker, err = manager.startReservedWorker(ctx, accountID, model)
+	}
 	if !aistudio.DefinitiveAuthenticationFailure(err) {
 		return worker, err
 	}
 	if manager.refresher != nil {
-		if recoverErr := manager.refresher.Recover(ctx, err, generation); recoverErr == nil {
-			worker, err = manager.startReservedWorker(ctx, accountID, model)
+		recoverCtx := context.WithValue(ctx, workerStartupRenewalKey{}, true)
+		if recoverErr := manager.refresher.Recover(recoverCtx, err, generation); recoverErr == nil {
+			worker, err = manager.startReservedWorker(context.WithValue(ctx, workerReloadKey{}, started), accountID, model)
 			if err == nil {
 				return worker, nil
 			}
 			err = manager.refresher.markAuthenticationRequired(ctx, err)
 		} else {
 			err = recoverErr
+			manager.requests.log(lease.Account().Config.Label, "ERROR", "WAA Worker 启动失败 | 错误="+strings.TrimSpace(err.Error()))
 		}
 	} else if ctx.Err() == nil {
 		err = errors.Join(err, lease.ConfirmAuthenticationFailure(ctx, err))

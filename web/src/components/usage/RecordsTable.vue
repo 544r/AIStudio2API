@@ -187,7 +187,7 @@ function latencyWidth(milliseconds: number): number {
   <section class="@container min-w-0 rounded-lg border border-line bg-panel">
     <header class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
       <div class="mr-auto min-w-0">
-        <h3 :id="`${id}-title`" class="text-sm font-medium text-gray-200">
+        <h3 :id="`${id}-title`" class="text-sm font-semibold text-gray-200">
           {{ t('usage.records') }}
         </h3>
         <p v-if="!filtered" class="text-xs text-gray-500">
@@ -295,13 +295,17 @@ function latencyWidth(milliseconds: number): number {
         <table class="w-full text-left text-xs" :aria-labelledby="`${id}-title`">
           <thead class="text-gray-500">
             <tr>
-              <th scope="col" class="px-4 py-2 font-normal">{{ t('usage.time') }}</th>
-              <th scope="col" class="px-4 py-2 font-normal">{{ t('usage.result') }}</th>
+              <th scope="col" class="px-4 py-2 font-normal whitespace-nowrap">
+                {{ t('usage.time') }}
+              </th>
+              <th scope="col" class="px-4 py-2 font-normal whitespace-nowrap">
+                {{ t('usage.result') }}
+              </th>
               <th
                 v-for="column in allColumns.filter((item) => visible.includes(item))"
                 :key="column"
                 scope="col"
-                class="px-4 py-2 font-normal"
+                class="px-4 py-2 font-normal whitespace-nowrap"
                 :class="[
                   ['tokens', 'queue', 'attempts'].includes(column) ? 'text-right' : '',
                   secondary.includes(column) ? secondaryClass : '',
