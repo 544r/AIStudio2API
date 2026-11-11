@@ -141,14 +141,26 @@ func (admin *runtimeAdmin) refreshPushedAccount(
 		return api.AdminAccount{}, accountOperationError(err)
 	}
 	account := lease.Account()
-	state := account.StorageState
-	state.Cookies = mergePushedCookies(state.Cookies, pushed.Cookies)
-	state.Origins = mergePushedOrigins(state.Origins, pushed.Origins)
+	current := account.StorageState
+	state := current
+	state.Cookies = mergePushedCookies(current.Cookies, pushed.Cookies)
+	state.Origins = mergePushedOrigins(current.Origins, pushed.Origins)
 	if _, err := aistudio.NewSigner().Authorization(state); err != nil {
 		return api.AdminAccount{}, errors.Join(invalidAccount(fmt.Errorf("认证状态无法用于 AI Studio: %w", err)), lease.Release())
 	}
 	config := account.Config
-	if config.AuthUser != input.AuthUser {
+	authUserChanged := config.AuthUser != input.AuthUser
+	// 推送内容与账户现有状态一致时跳过刷新：Worker 重启会把刚建立信任的会话
+	// 打回冷启动（旗舰模型首个请求可能吃到上游瞬时 PERMISSION_DENIED），而这次
+	// 推送没有任何新信息。鉴权失效的账户仍照常刷新，那是自救路径。
+	if !authUserChanged && account.State == aistudio.AccountReady && storageStatesEqual(current, state) {
+		if err := lease.Release(); err != nil {
+			return api.AdminAccount{}, err
+		}
+		admin.requests.log(accountID, "INFO", "账户由用户脚本推送（Cookie 无变化，跳过刷新）| Cookie="+strconv.Itoa(len(pushed.Cookies)))
+		return admin.account(accountID)
+	}
+	if authUserChanged {
 		// 浏览器里 Google 多登录的序号可能变化，推送的 u/N 就是当前真实序号
 		config.AuthUser = input.AuthUser
 		if err := lease.SaveConfig(config); err != nil {
@@ -169,6 +181,76 @@ func (admin *runtimeAdmin) refreshPushedAccount(
 	}
 	admin.requests.log(accountID, "INFO", "账户由用户脚本推送刷新 | Cookie="+strconv.Itoa(len(pushed.Cookies)))
 	return admin.account(accountID)
+}
+
+// storageStatesEqual 比较两份 storage state 的会话内容是否一致。
+//
+// Cookie 按 (名称, 域去掉前导点, 路径) 比较值；过期时间与 secure/httpOnly 等属性
+// 不参与比较——它们不影响上游请求。SIDCC 家族是 Google 每次响应都会轮换的反滥用
+// 标记，浏览器罐与服务端罐必然不同，也不参与比较，否则推送永远被判定为有变化。
+// localStorage 按 origin 比较键值。
+func storageStatesEqual(left, right aistudio.StorageState) bool {
+	cookieKey := func(cookie aistudio.StateCookie) [3]string {
+		domain := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(cookie.Domain), "."))
+		path := strings.TrimSpace(cookie.Path)
+		if path == "" {
+			path = "/"
+		}
+		return [3]string{cookie.Name, domain, path}
+	}
+	comparable := func(cookies []aistudio.StateCookie) map[[3]string]string {
+		values := make(map[[3]string]string, len(cookies))
+		for _, cookie := range cookies {
+			if rotatingSessionCookieNames[cookie.Name] {
+				continue
+			}
+			values[cookieKey(cookie)] = cookie.Value
+		}
+		return values
+	}
+	leftCookies, rightCookies := comparable(left.Cookies), comparable(right.Cookies)
+	if len(leftCookies) != len(rightCookies) {
+		return false
+	}
+	for key, value := range leftCookies {
+		if other, found := rightCookies[key]; !found || other != value {
+			return false
+		}
+	}
+	if len(left.Origins) != len(right.Origins) {
+		return false
+	}
+	originValues := func(origins []aistudio.StorageOrigin) map[string]map[string]string {
+		values := make(map[string]map[string]string, len(origins))
+		for _, origin := range origins {
+			items := make(map[string]string, len(origin.LocalStorage))
+			for _, item := range origin.LocalStorage {
+				items[item.Name] = item.Value
+			}
+			values[origin.Origin] = items
+		}
+		return values
+	}
+	leftOrigins, rightOrigins := originValues(left.Origins), originValues(right.Origins)
+	for origin, items := range leftOrigins {
+		other, found := rightOrigins[origin]
+		if !found || len(other) != len(items) {
+			return false
+		}
+		for name, value := range items {
+			if otherValue, found := other[name]; !found || otherValue != value {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// rotatingSessionCookieNames 是每次上游响应都会轮换、不承载登录态的反滥用 Cookie
+var rotatingSessionCookieNames = map[string]bool{
+	"SIDCC":            true,
+	"__Secure-1PSIDCC": true,
+	"__Secure-3PSIDCC": true,
 }
 
 // mergePushedCookies 按 (名称, 域, 路径) 用推送值覆盖账户现有 Cookie，保留推送里没有的长寿凭据
