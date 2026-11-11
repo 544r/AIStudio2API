@@ -1759,6 +1759,52 @@ type generateRetry struct {
 	quotaRejected bool
 	// quotaUntil 是本次请求中因额度失败而冷却的账户最早的恢复时刻
 	quotaUntil time.Time
+	// passesLeft 是全池被瞬时错误拒绝后剩余的退避重试轮数
+	passesLeft int
+}
+
+// generateRetryPasses 是全池被 403/401/429/5xx 等瞬时错误拒绝后退避重试的轮数上限。
+// 上游对旗舰模型偶发的瞬时 PERMISSION_DENIED 门（秒级拒绝、数十秒后自行恢复）若直接
+// 把错误抛给下游，客户端要靠自己的重试兜底；这里在服务内部退避后把整个账户池再试一轮，
+// 代价是最多增加数十秒首字延迟。确认性鉴权失败（auth_required）不重试。
+const generateRetryPasses = 2
+
+// retryPassWaits 是各重试轮的退避时长：第一轮 12s，第二轮 30s
+var retryPassWaits = [generateRetryPasses]time.Duration{12 * time.Second, 30 * time.Second}
+
+// beginRetryPass 判断是否值得退避重试一轮，是则等待并放行下一轮全池尝试
+func (service *trackedService) beginRetryPass(
+	requestCtx context.Context,
+	requestID, modelID string,
+	retry *generateRetry,
+	accountLabel string,
+	err error,
+) bool {
+	if retry.passesLeft <= 0 || requestCtx.Err() != nil {
+		return false
+	}
+	if aistudio.DefinitiveAuthenticationFailure(err) || !retryableGenerateAccountError(requestCtx, err) {
+		return false
+	}
+	passIndex := generateRetryPasses - retry.passesLeft
+	wait := retryPassWaits[passIndex]
+	retry.passesLeft--
+	service.requests.logRequestProgress(requestID, accountLabel, "WARN", fmt.Sprintf(
+		"上游全部账户暂被拒绝 | 退避=%s 后重试第 %d/%d 轮 | 模型=%s\n原因: %s",
+		wait, passIndex+1, generateRetryPasses, modelID, strings.TrimSpace(err.Error()),
+	))
+	select {
+	case <-time.After(wait):
+	case <-requestCtx.Done():
+		return false
+	}
+	_, eligible := service.pool.EnabledAccounts()
+	if eligible < 1 {
+		return false
+	}
+	retry.attempted = make(map[string]struct{}, eligible)
+	retry.maxAttempts += eligible
+	return true
 }
 
 // attemptOutcome 是失败尝试处理后的错误与换号决定
@@ -1784,7 +1830,7 @@ func (service *trackedService) generateWithRetry(
 	continuationRounds := service.pool.OutputContinuationRounds(modelID, request.Config.MaxOutputTokens)
 	unbound := requestedAccountID == "" && resourceID == ""
 	fileBound := requestedAccountID == "" && resourceID != ""
-	retry := &generateRetry{maxAttempts: 1, recoveredWorker: make(map[string]struct{}), buildOnly: aistudio.RequestBuildOnly(request)}
+	retry := &generateRetry{maxAttempts: 1, recoveredWorker: make(map[string]struct{}), buildOnly: aistudio.RequestBuildOnly(request), passesLeft: generateRetryPasses}
 	if unbound || fileBound {
 		_, eligible := service.pool.EnabledAccounts()
 		if eligible > 1 {
@@ -1974,7 +2020,10 @@ func (service *trackedService) generateWithRetry(
 			retry.maxAttempts++
 		}
 		if attempt+1 == retry.maxAttempts {
-			break
+			if !service.beginRetryPass(requestCtx, request.ID, modelID, retry, last.accountLabel, err) {
+				break
+			}
+			continue
 		}
 		if last.recoverWorker && errors.Is(err, aistudio.ErrProtectedTransport) {
 			service.requests.logRequestProgress(request.ID, last.accountLabel, "WARN", fmt.Sprintf(
