@@ -1865,9 +1865,11 @@ export const messages = {
   'access.testRun': '发送测试请求',
   'access.testModels': '返回 {count} 个模型',
   'access.userscript': 'Cookie 推送脚本',
-  'access.userscriptHelp': '用篡改猴把浏览器里的 AI Studio 登录 Cookie 定时推送到本服务，过期后不用手动重贴',
+  'access.userscriptHelp':
+    '用篡改猴把浏览器里的 AI Studio 登录 Cookie 定时推送到本服务，过期后不用手动重贴',
   'access.userscriptInstall': '安装油猴脚本',
-  'access.userscriptPermission': '安装后在脚本菜单填本服务地址；篡改猴需允许脚本访问 Cookie（设为 all）',
+  'access.userscriptPermission':
+    '安装后在脚本菜单填本服务地址；篡改猴需允许脚本访问 Cookie（设为 all）',
   'access.testReply': '模型回复：{text}',
   'access.testEmptyReply': '请求成功，模型没有返回文字',
   'access.testUnreachable': '无法连接到服务',

@@ -14,7 +14,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.adminPassword': 'Konsolenpasswort',
   'settings.keepPassword': 'Leer lassen, um das aktuelle Passwort zu behalten',
   'settings.pushToken': 'Push-Token',
-  'settings.pushTokenHelp': 'Wird vom Userscript beim Senden von Cookies verwendet; leer lassen, um den Push-Endpunkt zu deaktivieren. Änderungen wirken sofort',
+  'settings.pushTokenHelp':
+    'Wird vom Userscript beim Senden von Cookies verwendet; leer lassen, um den Push-Endpunkt zu deaktivieren. Änderungen wirken sofort',
   'settings.pushTokenGenerate': 'Zufällig erzeugen',
   'settings.buildNative': 'Build für Anfragen ohne Streaming bevorzugen',
   'settings.nonstreamKeepalive': 'Anfragen ohne Streaming offen halten',
@@ -2038,9 +2039,11 @@ export const messages: Record<TranslationKey, string> = {
   'access.testRun': 'Testanfrage senden',
   'access.testModels': '{count} Modelle zurückgegeben',
   'access.userscript': 'Cookie-Push-Skript',
-  'access.userscriptHelp': 'Tampermonkey sendet die AI-Studio-Anmelde-Cookies aus dem Browser regelmäßig an diesen Dienst, damit abgelaufene Cookies nicht erneut eingefügt werden müssen',
+  'access.userscriptHelp':
+    'Tampermonkey sendet die AI-Studio-Anmelde-Cookies aus dem Browser regelmäßig an diesen Dienst, damit abgelaufene Cookies nicht erneut eingefügt werden müssen',
   'access.userscriptInstall': 'Userscript installieren',
-  'access.userscriptPermission': 'Nach der Installation die URL dieses Dienstes im Skriptmenü eintragen; in Tampermonkey den Cookie-Zugriff auf all setzen',
+  'access.userscriptPermission':
+    'Nach der Installation die URL dieses Dienstes im Skriptmenü eintragen; in Tampermonkey den Cookie-Zugriff auf all setzen',
   'access.testReply': 'Antwort des Modells: {text}',
   'access.testEmptyReply': 'Anfrage erfolgreich; das Modell hat keinen Text zurückgegeben',
   'access.testUnreachable': 'Dienst nicht erreichbar',

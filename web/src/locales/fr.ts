@@ -14,7 +14,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.adminPassword': 'Mot de passe de la console',
   'settings.keepPassword': 'Laisser vide pour conserver le mot de passe actuel',
   'settings.pushToken': 'Jeton de push',
-  'settings.pushTokenHelp': 'Utilisé par le userscript pour envoyer les cookies ; laissez vide pour désactiver l’endpoint de push. Prise d’effet immédiate',
+  'settings.pushTokenHelp':
+    'Utilisé par le userscript pour envoyer les cookies ; laissez vide pour désactiver l’endpoint de push. Prise d’effet immédiate',
   'settings.pushTokenGenerate': 'Générer',
   'settings.buildNative': 'Privilégier Build pour les requêtes sans streaming',
   'settings.nonstreamKeepalive': 'Maintenir les requêtes sans streaming',
@@ -2040,9 +2041,11 @@ export const messages: Record<TranslationKey, string> = {
   'access.testRun': 'Envoyer la requête de test',
   'access.testModels': '{count} modèles renvoyés',
   'access.userscript': 'Script de push des cookies',
-  'access.userscriptHelp': 'Utilisez Tampermonkey pour envoyer périodiquement les cookies de connexion AI Studio de votre navigateur à ce service, sans avoir à les recoller après expiration',
+  'access.userscriptHelp':
+    'Utilisez Tampermonkey pour envoyer périodiquement les cookies de connexion AI Studio de votre navigateur à ce service, sans avoir à les recoller après expiration',
   'access.userscriptInstall': 'Installer le userscript',
-  'access.userscriptPermission': 'Après installation, renseignez l’URL de ce service dans le menu du script ; autorisez l’accès aux cookies (all) dans Tampermonkey',
+  'access.userscriptPermission':
+    'Après installation, renseignez l’URL de ce service dans le menu du script ; autorisez l’accès aux cookies (all) dans Tampermonkey',
   'access.testReply': 'Réponse du modèle : {text}',
   'access.testEmptyReply': 'Requête réussie ; le modèle n’a renvoyé aucun texte',
   'access.testUnreachable': 'Impossible de joindre le service',

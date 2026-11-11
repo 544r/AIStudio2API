@@ -14,7 +14,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.adminPassword': 'コンソールのパスワード',
   'settings.keepPassword': '空欄のままにすると現在のパスワードを維持します',
   'settings.pushToken': 'プッシュトークン',
-  'settings.pushTokenHelp': 'ユーザースクリプトが Cookie を送信するときに使用します。空欄にするとプッシュエンドポイントが無効になります。保存後すぐに反映されます',
+  'settings.pushTokenHelp':
+    'ユーザースクリプトが Cookie を送信するときに使用します。空欄にするとプッシュエンドポイントが無効になります。保存後すぐに反映されます',
   'settings.pushTokenGenerate': 'ランダム生成',
   'settings.buildNative': 'ストリーミング以外のリクエストで Build を優先する',
   'settings.nonstreamKeepalive': '非ストリーミング リクエストのキープアライブ',
@@ -1986,9 +1987,11 @@ export const messages: Record<TranslationKey, string> = {
   'access.testRun': 'テストリクエストを送信',
   'access.testModels': '{count} 個のモデルを取得しました',
   'access.userscript': 'Cookie プッシュスクリプト',
-  'access.userscriptHelp': 'Tampermonkey でブラウザの AI Studio ログイン Cookie を定期的にこのサービスへ送信し、期限切れのたびに貼り直す必要をなくします',
+  'access.userscriptHelp':
+    'Tampermonkey でブラウザの AI Studio ログイン Cookie を定期的にこのサービスへ送信し、期限切れのたびに貼り直す必要をなくします',
   'access.userscriptInstall': 'ユーザースクリプトをインストール',
-  'access.userscriptPermission': 'インストール後、スクリプトメニューでこのサービスの URL を設定してください。Tampermonkey で Cookie へのアクセスを all に設定する必要があります',
+  'access.userscriptPermission':
+    'インストール後、スクリプトメニューでこのサービスの URL を設定してください。Tampermonkey で Cookie へのアクセスを all に設定する必要があります',
   'access.testReply': 'モデルの応答：{text}',
   'access.testEmptyReply': 'リクエストは成功しましたが、モデルはテキストを返しませんでした',
   'access.testUnreachable': 'サービスに接続できません',

@@ -14,7 +14,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.adminPassword': '콘솔 비밀번호',
   'settings.keepPassword': '비워 두면 현재 비밀번호가 유지됩니다',
   'settings.pushToken': '푸시 토큰',
-  'settings.pushTokenHelp': '유저스크립트가 쿠키를 전송할 때 사용합니다. 비워 두면 푸시 엔드포인트가 비활성화되며, 저장 후 즉시 적용됩니다',
+  'settings.pushTokenHelp':
+    '유저스크립트가 쿠키를 전송할 때 사용합니다. 비워 두면 푸시 엔드포인트가 비활성화되며, 저장 후 즉시 적용됩니다',
   'settings.pushTokenGenerate': '무작위 생성',
   'settings.buildNative': '스트리밍이 아닌 요청에 Build 우선 사용',
   'settings.nonstreamKeepalive': '비스트리밍 요청 연결 유지',
@@ -1967,9 +1968,11 @@ export const messages: Record<TranslationKey, string> = {
   'access.testRun': '테스트 요청 보내기',
   'access.testModels': '모델 {count}개를 받았습니다',
   'access.userscript': '쿠키 푸시 스크립트',
-  'access.userscriptHelp': 'Tampermonkey로 브라우저의 AI Studio 로그인 쿠키를 주기적으로 이 서비스에 전송해 만료될 때마다 다시 붙여넣지 않아도 됩니다',
+  'access.userscriptHelp':
+    'Tampermonkey로 브라우저의 AI Studio 로그인 쿠키를 주기적으로 이 서비스에 전송해 만료될 때마다 다시 붙여넣지 않아도 됩니다',
   'access.userscriptInstall': '유저스크립트 설치',
-  'access.userscriptPermission': '설치 후 스크립트 메뉴에서 이 서비스 주소를 입력하세요. Tampermonkey에서 스크립트의 쿠키 접근을 all로 설정해야 합니다',
+  'access.userscriptPermission':
+    '설치 후 스크립트 메뉴에서 이 서비스 주소를 입력하세요. Tampermonkey에서 스크립트의 쿠키 접근을 all로 설정해야 합니다',
   'access.testReply': '모델 응답: {text}',
   'access.testEmptyReply': '요청은 성공했지만 모델이 텍스트를 반환하지 않았습니다',
   'access.testUnreachable': '서비스에 연결할 수 없습니다',

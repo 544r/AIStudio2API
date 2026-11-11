@@ -14,7 +14,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.adminPassword': 'Console password',
   'settings.keepPassword': 'Leave blank to keep the current password',
   'settings.pushToken': 'Push token',
-  'settings.pushTokenHelp': 'Used by the userscript when pushing cookies; leave empty to disable the push endpoint. Changes take effect immediately',
+  'settings.pushTokenHelp':
+    'Used by the userscript when pushing cookies; leave empty to disable the push endpoint. Changes take effect immediately',
   'settings.pushTokenGenerate': 'Generate',
   'settings.buildNative': 'Prefer Build for non-streaming requests',
   'settings.nonstreamKeepalive': 'Keep non-streaming requests alive',
@@ -1996,9 +1997,11 @@ export const messages: Record<TranslationKey, string> = {
   'access.testRun': 'Send test request',
   'access.testModels': '{count} models returned',
   'access.userscript': 'Cookie push script',
-  'access.userscriptHelp': 'Use Tampermonkey to periodically push AI Studio login cookies from your browser to this service, so expired cookies do not need to be pasted again',
+  'access.userscriptHelp':
+    'Use Tampermonkey to periodically push AI Studio login cookies from your browser to this service, so expired cookies do not need to be pasted again',
   'access.userscriptInstall': 'Install userscript',
-  'access.userscriptPermission': 'After installing, set this service URL in the script menu; allow the script to access cookies (all) in Tampermonkey',
+  'access.userscriptPermission':
+    'After installing, set this service URL in the script menu; allow the script to access cookies (all) in Tampermonkey',
   'access.testReply': 'Model replied: {text}',
   'access.testEmptyReply': 'Request succeeded; the model returned no text',
   'access.testUnreachable': 'Can’t reach the service',
