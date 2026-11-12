@@ -352,7 +352,7 @@ export const messages: Record<TranslationKey, string> = {
     'Der Build-Kanal ist upstream deaktiviert; abgelehnte Anfragen laufen über den Standardkanal',
   'settings.channelRow': '{channel}-Kanal',
   'settings.upstreamChannelsHelp':
-    'Standard ist Playground. Build ist der alte Kanal, dessen Generierung upstream eingestellt ist; aktiviert laufen abgelehnte Anfragen über Playground',
+    'Die Generierung nutzt nur den Playground-Kanal; der Build-Kanal wurde entfernt, da er App-Objekte im Konto erstellt',
   'settings.modelMapping': 'Modellzuordnung',
   'settings.modelMappingHelp': 'Anfragen für den Modellnamen links verwenden das Modell rechts',
   'settings.modelChannels': 'Modellkanäle',

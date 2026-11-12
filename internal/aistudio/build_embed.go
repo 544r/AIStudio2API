@@ -130,13 +130,10 @@ func DecodeBuildEmbedResponse(source io.Reader, expected int) (EmbeddingResult, 
 	return result, nil
 }
 
-// DoProtectedBuild 把 page 写入页面提示词并写入 fresh proof 后通过账户 Worker 发送 Build 代理请求，binding 为路径与请求体
+// DoProtectedBuild 已随 Build 通道移除：所有经 Build 代理的请求（embedding、
+// countTokens、实时模型）在传输层直接失败，不会发出任何 Build RPC。
 func (t *WorkerProtectedTransport) DoProtectedBuild(ctx context.Context, selection AccountSelection, page string, rpc RPCRequest) (*RPCResponse, error) {
-	prompt, err := buildBindingPrompt(rpc.Body)
-	if err != nil {
-		return nil, err
-	}
-	return t.doPrepared(ctx, prompt, page, buildProofField, selection, rpc)
+	return nil, fmt.Errorf("%w: Build 通道已移除", ErrInvalidArgument)
 }
 
 // buildEmbedBatchLimit 是上游 batchEmbedContents 单次接受的最大请求数

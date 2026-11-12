@@ -4,69 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
 	"github.com/Mag1cFall/AIStudio2API/internal/api"
 )
 
-// Embed 跟踪 Build 通道 embedding 使用的账户、通道与输入 token
+// Embed 返回 Build 通道移除后的固定错误：embedding 只能经 Build 代理调用，
+// 而 Build 代理已随写代码助手通道一起移除。
 func (service *trackedService) Embed(ctx context.Context, request aistudio.EmbeddingRequest) (aistudio.EmbeddingResult, error) {
-	request.Model = service.mappedModel(request.Model)
-	api.SetAccessLogTarget(ctx, request.Model, "")
-	api.StartAccessLog(ctx)
-	request.Model = service.catalogModelID(ctx, request.Model)
-	modelID := strings.TrimPrefix(strings.TrimSpace(request.Model), "models/")
-	requestCtx, cancel, err := service.dataRequestContext(ctx)
-	if err != nil {
-		api.SetAccessLogError(ctx, err)
-		return aistudio.EmbeddingResult{}, err
-	}
-	defer cancel()
-	service.requests.start(aistudio.GenerateRequest{ID: request.ID, Model: request.Model}, cancel)
-	request.CandidateAccountIDs, err = service.embeddingCandidates(requestCtx, modelID)
-	if err != nil {
-		api.SetAccessLogError(requestCtx, err)
-		service.requests.finish(request.ID, finalRequestState(err))
-		return aistudio.EmbeddingResult{}, err
-	}
-	workerGenerations := make(map[string]uint64)
-	recoveredWorkers := make(map[string]struct{})
-	request.ObserveAccountFailure = func(accountID string, cause error) {
-		service.requests.logRequestProgress(request.ID, service.accountLabel(accountID), "WARN", fmt.Sprintf(
-			"账号切换 | 模型=%s\n原因: %s", modelID, strings.TrimSpace(cause.Error()),
-		))
-	}
-	request.RecoverWAARuntime = func(recoveryCtx context.Context, accountID string, cause error) (bool, error) {
-		workerFailed := service.workers.WorkerFailed(accountID)
-		workerReplaced := errors.Is(cause, errAccountWorkerReplaced)
-		if recoveryCtx.Err() != nil || !needsWAARuntimeRecovery(cause, workerFailed, workerReplaced) {
-			return false, nil
-		}
-		recovered, _, recoveryErr := service.recoverWorkerOnce(
-			recoveryCtx, accountID, workerGenerations[accountID], recoveredWorkers,
-			true, workerFailed || aistudio.DefinitiveWAARuntimeFailure(cause),
-		)
-		if recovered && recoveryErr == nil {
-			service.requests.logRequestProgress(request.ID, service.accountLabel(accountID), "WARN", "WAA Worker 重建 | 模型="+modelID+" | 重放当前请求")
-		}
-		return recovered, recoveryErr
-	}
-	observed := aistudio.ContextWithAccountSelectionObserver(requestCtx, func(account *aistudio.Account) {
-		workerGenerations[account.ID] = service.workers.WorkerGeneration(account.ID)
-		api.SetAccessLogChannel(requestCtx, string(aistudio.ChannelBuild))
-		api.SetAccessLogTarget(requestCtx, modelID, account.Config.Label)
-		api.MarkAccessLogScheduled(requestCtx)
-		service.requests.markRunning(request.ID, account.ID, account.Config.Label)
-		service.requests.markChannel(request.ID, string(aistudio.ChannelBuild))
-	})
-	result, err := service.service.(aistudio.EmbeddingService).Embed(observed, request)
-	if err == nil {
-		api.SetAccessLogGenerationResult(requestCtx, &aistudio.Usage{InputTokens: result.TokenCount, TotalTokens: result.TokenCount}, 0)
-	}
-	api.SetAccessLogError(requestCtx, err)
-	service.requests.finish(request.ID, finalRequestState(err))
-	return result, err
+	err := fmt.Errorf("%w: Build 通道已移除，/v1/embeddings 不可用", aistudio.ErrInvalidArgument)
+	api.SetAccessLogError(ctx, err)
+	return aistudio.EmbeddingResult{}, err
 }
 
 // embeddingCandidates 按已有 Worker 优先的顺序列出 Build 通道支持 embedding 模型的账户

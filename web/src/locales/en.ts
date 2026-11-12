@@ -349,7 +349,7 @@ export const messages: Record<TranslationKey, string> = {
     'The Build channel is disabled upstream; rejected requests complete through the default channel',
   'settings.channelRow': '{channel} channel',
   'settings.upstreamChannelsHelp':
-    'Playground is the default channel. Build is the legacy channel with generation disabled upstream; when on, rejected requests complete via Playground',
+    'Generation uses the Playground channel only; the Build channel has been removed because it creates app objects inside the account',
   'settings.modelMapping': 'Model mapping',
   'settings.modelMappingHelp': 'Requests for the model name on the left use the model on the right',
   'settings.modelChannels': 'Model channels',

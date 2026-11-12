@@ -1,5 +1,7 @@
 # Build 通道
 
+> **已移除**：本 fork 不提供 Build 通道。`-build` 写代码助手模型与 Build 应用代理均不可用；`UPSTREAM_CHANNELS` 只接受 `playground`。原因是该通道会在账号中创建应用对象，属于账号侧可见的自动化痕迹。本文仅作历史实现记录保留。
+
 AI Studio 的 Build 应用经官网宿主页调用 MakerSuite 代理 RPC 访问 Gemini API，免费账户在这部分调用与 Playground 上计入同一模型的同一份每日请求次数，例如 `gemini-3.8-flash` 为每日 100 次。服务把 Build 作为与 Playground 对等的生成通道，生成请求按账户与通道的组合调度。本文定义代理 RPC 的 wire、请求头与 WAA、模型目录与资格、调度与冷却、Gemini API JSON 的逐字段映射、响应解码、错误与额度处理，通道的配置与显示，以及经 `-build` 模型调用的写代码助手通道。Playground 的 `GenerateContent` 见 [协议规范](protocol.md)。
 
 ## 1. 官网机制与通道配置

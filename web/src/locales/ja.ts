@@ -353,7 +353,7 @@ export const messages: Record<TranslationKey, string> = {
     'Build チャネルは上流で停止されています。拒否されたリクエストは既定のチャネルで完了します',
   'settings.channelRow': '{channel} チャネル',
   'settings.upstreamChannelsHelp':
-    '既定は Playground。Build は旧チャネルで上流の生成は停止済み。オン時、拒否されたリクエストは Playground で完了',
+    '生成は Playground チャネルのみを使用します。Build チャネルは削除されました（アカウント内にアプリオブジェクトを作成するため）',
   'settings.modelMapping': 'モデルのマッピング',
   'settings.modelMappingHelp': '左のモデル名へのリクエストに右のモデルを使います',
   'settings.modelChannels': 'モデルのチャネル',

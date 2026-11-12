@@ -1693,8 +1693,13 @@ func (service *trackedService) Generate(ctx context.Context, request aistudio.Ge
 		err = suffixErr
 		cancel()
 	}
-	if err == nil && aistudio.RequestBuildOnly(request) && !service.pool.BuildEnabled() {
-		err = fmt.Errorf("%w: File Search 只能经 Build 通道发送，UPSTREAM_CHANNELS 没有启用 build", aistudio.ErrInvalidArgument)
+	// Build 写代码助手通道已移除：-build 模型与只能经 Build 发送的请求在进入调度前拒绝
+	if err == nil && aistudio.IsRetiredBuildModel(request.Model) {
+		err = fmt.Errorf("%w: Build 通道已移除，模型 %s 不可用", aistudio.ErrInvalidArgument, request.Model)
+		cancel()
+	}
+	if err == nil && aistudio.RequestBuildOnly(request) {
+		err = fmt.Errorf("%w: File Search 只能经 Build 通道发送，Build 通道已移除", aistudio.ErrInvalidArgument)
 		cancel()
 	}
 	if validator, ok := service.service.(interface {

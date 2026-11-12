@@ -4,10 +4,10 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 )
 
-// TestChannelSelection 保留文件绑定与专属能力的通道资格
+// TestChannelSelection 验证 Build 通道移除后只剩 Playground：即使配置里写了 build，
+// 生成、计数与限定通道的选择都只落到 Playground，显式指定 Build 的选择没有通道可用。
 func TestChannelSelection(t *testing.T) {
 	pool := NewAccountPool(nil, 1)
 	pool.SetUpstreamChannels([]Channel{ChannelPlayground, ChannelBuild})
@@ -15,25 +15,25 @@ func TestChannelSelection(t *testing.T) {
 		selection AccountSelection
 		want      []Channel
 	}{
-		{AccountSelection{ModelID: "gemini", Method: "generateContent"}, []Channel{ChannelPlayground, ChannelBuild}},
-		{AccountSelection{ModelID: "gemini", Method: "generateContent", Channel: ChannelBuild}, []Channel{ChannelBuild}},
+		{AccountSelection{ModelID: "gemini", Method: "generateContent"}, []Channel{ChannelPlayground}},
+		{AccountSelection{ModelID: "gemini", Method: "generateContent", Channel: ChannelBuild}, nil},
 		{AccountSelection{ModelID: "gemini", Method: "generateContent", ResourceID: "file", Channel: ChannelBuild}, []Channel{ChannelPlayground}},
-		{AccountSelection{ModelID: "gemini", Method: "countTokens"}, []Channel{ChannelPlayground, ChannelBuild}},
-		{AccountSelection{ModelID: "gemini", Method: "countTokens", Channel: ChannelBuild}, []Channel{ChannelBuild}},
+		{AccountSelection{ModelID: "gemini", Method: "countTokens"}, []Channel{ChannelPlayground}},
+		{AccountSelection{ModelID: "gemini", Method: "countTokens", Channel: ChannelBuild}, []Channel{ChannelPlayground}},
 		{AccountSelection{ModelID: "gemini", Method: "generateContent", PlaygroundOnly: true, Channel: ChannelBuild}, []Channel{ChannelPlayground}},
 	} {
 		if got := pool.selectionChannelsLocked(item.selection); !reflect.DeepEqual(got, item.want) {
 			t.Errorf("selection=%+v channels=%v want=%v", item.selection, got, item.want)
 		}
 	}
-	pool.SetUpstreamChannels([]Channel{ChannelPlayground})
 	if got := pool.selectionChannelsLocked(AccountSelection{ModelID: "gemini", Method: "generateContent", Channel: ChannelBuild}); len(got) != 0 {
 		t.Fatalf("disabled Build channels=%v", got)
 	}
 }
 
-// TestPreferredChannelPerAccount 验证优先通道按账户生效，账户的优先通道冷却后由同账户其余通道接住
-func TestPreferredChannelPerAccount(t *testing.T) {
+// TestRetiredBuildNeverSelected 验证优先通道设为 Build 时也不会选到 Build，
+// 账户只按 Playground 出租约。
+func TestRetiredBuildNeverSelected(t *testing.T) {
 	model := Model{ID: "gemini", Methods: []string{"generateContent"}, Capabilities: map[string]bool{"chat_model": true}}
 	accounts := []*Account{
 		{ID: "a@example.com", Config: AccountConfig{Enabled: true}, State: AccountReady, Models: []Model{model}, modelAccessGeneration: 1},
@@ -47,28 +47,35 @@ func TestPreferredChannelPerAccount(t *testing.T) {
 		}
 	}
 	selection := AccountSelection{ModelID: "gemini", Method: "generateContent", PreferredChannel: ChannelBuild}
-	var picks []string
-	pick := func() {
+	used := make(map[string]struct{})
+	for range 4 {
 		lease, _, err := pool.TryAcquireFor(context.Background(), selection)
 		if err != nil || lease == nil {
 			t.Fatalf("lease=%v err=%v", lease, err)
 		}
-		picks = append(picks, lease.Account().ID+"/"+string(lease.Channel()))
+		if lease.Channel() != ChannelPlayground {
+			t.Fatalf("account=%s channel=%s, want playground", lease.Account().ID, lease.Channel())
+		}
+		used[lease.Account().ID] = struct{}{}
 		if err := lease.Release(); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for range 3 {
-		pick()
+	if len(used) != 2 {
+		t.Fatalf("used accounts=%v, want both accounts", used)
 	}
-	if err := pool.MarkCooldownIfGeneration("a@example.com", ChannelCooldownScope(ChannelBuild, "gemini"), 1, time.Now(), time.Now().Add(time.Hour), "fixture"); err != nil {
-		t.Fatal(err)
+}
+
+// TestIsRetiredBuildModel 验证 -build 后缀识别覆盖带 models/ 前缀的写法
+func TestIsRetiredBuildModel(t *testing.T) {
+	for _, modelID := range []string{"gemini-4-build", "models/gemini-4-build"} {
+		if !IsRetiredBuildModel(modelID) {
+			t.Fatalf("%q should be retired", modelID)
+		}
 	}
-	for range 2 {
-		pick()
-	}
-	want := []string{"a@example.com/build", "b@example.com/build", "a@example.com/build", "a@example.com/playground", "b@example.com/build"}
-	if !reflect.DeepEqual(picks, want) {
-		t.Fatalf("picks=%v want=%v", picks, want)
+	for _, modelID := range []string{"gemini-4", "models/gemini-4", "build", "gemini-build-preview"} {
+		if IsRetiredBuildModel(modelID) {
+			t.Fatalf("%q should not be retired", modelID)
+		}
 	}
 }

@@ -827,7 +827,8 @@ func (c *Client) Generate(ctx context.Context, request GenerateRequest) (<-chan 
 	sendRequest := func() (*RPCResponse, func(io.Reader, func(Event) error) error, error) {
 		switch {
 		case entry.model.Capabilities["assistant_route"]:
-			return c.sendAssistant(ctx, wireRequest, entry)
+			// Build 写代码助手通道已移除：不再创建应用，也不再发送 CodeAssistantOffline
+			return nil, nil, fmt.Errorf("%w: Build 写代码助手通道已移除", ErrInvalidArgument)
 		case build:
 			return c.sendBuild(ctx, wireRequest, entry)
 		default:

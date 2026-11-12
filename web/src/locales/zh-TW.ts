@@ -333,7 +333,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.buildLegacyNotice': 'Build 通道已被上游停用，請求遭拒後改由預設通道完成',
   'settings.channelRow': '{channel} 通道',
   'settings.upstreamChannelsHelp':
-    'Playground 為預設通道；Build 為舊版通道，上游已停用其生成，開啟後被拒請求改經預設通道完成',
+    '僅使用 Playground 通道生成；Build 通道已移除（該通道會在帳號中建立應用物件）',
   'settings.modelMapping': '模型對應',
   'settings.modelMappingHelp': '用戶端請求左側的模型名稱時，改用右側的模型',
   'settings.modelChannels': '模型通道',
