@@ -2597,7 +2597,12 @@ func (service *trackedService) settleAttempt(
 			retryable = false
 		}
 	}
-	if retryable && !quotaFailure && !buildRejected && !missingInlineMedia && !recoverWorker && !errors.Is(err, aistudio.ErrAccountCoolingDown) {
+	// 模型级瞬时权限门不占换号次数：它针对同一个模型同时拒绝全部账户，不是账户问题。
+	// 计入 MAX_ACCOUNT_SWITCHES 会在账户较多时提前结束循环，永远走不到全池退避重试；
+	// 显式设置 MAX_ACCOUNT_SWITCHES=0 时按不换号处理。
+	transientGate := service.maxAccountSwitches > 0 && aistudio.TransientPermissionGate(err)
+	if retryable && !quotaFailure && !buildRejected && !missingInlineMedia && !recoverWorker &&
+		!errors.Is(err, aistudio.ErrAccountCoolingDown) && !transientGate {
 		retry.failures++
 		retryable = retry.failures <= service.maxAccountSwitches
 	}
