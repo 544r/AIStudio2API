@@ -26,9 +26,6 @@ func prepareShell(args []string) error {
 	if err := os.Chdir(directory); err != nil {
 		return err
 	}
-	if err := linkWebKitHelpers(); err != nil {
-		return err
-	}
 	if len(args) != 0 && args[0] == "setup" {
 		attachConsole()
 	}
@@ -73,14 +70,17 @@ type uiShell struct {
 	app *desktop.App
 }
 
-// newShell 创建桌面应用，open 为 false 时窗口保持隐藏、只显示托盘，hideDock 为 true 时 macOS 不显示 Dock 图标，stop 在桌面应用退出前结束生成服务
+// newShell 创建桌面应用，open 为 false 时窗口保持隐藏、只显示托盘，hideDock 为 true 时 macOS 不显示 Dock 图标，stop 在桌面应用退出前结束生成服务；Windows 的 WebView2 数据写入 %LocalAppData%\AIStudio2API\WebView2
 func newShell(open, hideDock bool, stop func()) *uiShell {
-	webview, _ := filepath.Abs(filepath.Join("runtime", "webview"))
-	return &uiShell{app: desktop.New(open, hideDock, webview, stop)}
+	cache, _ := os.UserCacheDir()
+	return &uiShell{app: desktop.New(open, hideDock, filepath.Join(cache, "AIStudio2API", "WebView2"), stop)}
 }
 
 // run 运行窗口与托盘：服务就绪前显示启动画面，就绪后显示管理页面，启动失败时显示错误对话框后退出
 func (s *uiShell) run(ctx context.Context, start func() (serviceReady, error)) error {
+	if err := linkWebKitHelpers(); err != nil {
+		return err
+	}
 	return s.app.Run(ctx, func() (string, error) {
 		service, err := start()
 		return service.url, err

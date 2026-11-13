@@ -26,6 +26,8 @@ type PooledService struct {
 	BuildNativeNonstream bool
 	// YouTubeLinks 把 user 文本中的 YouTube 链接作为视频外部媒体发送
 	YouTubeLinks bool
+	// DiscoverHiddenModels 让同步账户目录时探测官网前端已配置、ListModels 尚未列出的模型
+	DiscoverHiddenModels bool
 	// StripThoughtSignatures 发送前去掉对话历史中的思考签名
 	StripThoughtSignatures bool
 	// ContinuationRewrite 改写不接受以 model 轮结尾请求的模型的末尾 assistant 轮
@@ -100,7 +102,7 @@ func NewWorkerProtectedTransport(options WorkerProtectedTransportOptions) *Worke
 	}
 }
 
-// DoProtected 写入 fresh proof 后经账户的 WAA 运行时发送 GenerateContent、Build 代理或写代码助手请求，写入页面输入框的提示词为最后一个轮次的文本；账户页面再次运行同一对话的 GenerateContent 按官网 Rerun 不写入提示词
+// DoProtected 写入 fresh proof 后经账户的 WAA 运行时发送 GenerateContent 或 Build 代理请求，写入页面输入框的提示词为最后一个轮次的文本；账户页面再次运行同一对话的 GenerateContent 按官网 Rerun 不写入提示词
 func (t *WorkerProtectedTransport) DoProtected(ctx context.Context, request GenerateRequest, rpc RPCRequest) (*RPCResponse, error) {
 	var prompt string
 	var err error
@@ -109,9 +111,6 @@ func (t *WorkerProtectedTransport) DoProtected(ctx context.Context, request Gene
 	case buildProxyStreamedMethod, buildProxyUnaryMethod:
 		prompt, err = buildBindingPrompt(rpc.Body)
 		proofField = buildProofField
-	case assistantOfflineMethod:
-		prompt, err = bindingPrompt(request)
-		proofField = assistantProofField
 	default:
 		prompt, err = bindingPrompt(request)
 	}
@@ -123,21 +122,22 @@ func (t *WorkerProtectedTransport) DoProtected(ctx context.Context, request Gene
 		page = ""
 	}
 	modelID := strings.TrimPrefix(strings.TrimSpace(request.Model), "models/")
-	return t.doPrepared(ctx, prompt, page, proofField, AccountSelection{
+	return t.doPrepared(ctx, prompt, page, proofField, request.continuationProof, AccountSelection{
 		ModelID: modelID, Method: "generateContent", AccountID: strings.TrimSpace(request.AccountID),
 	}, rpc)
 }
 
-// doPrepared 为请求写入 proof 后经账户的 WAA 运行时发送，并写回运行时导出的 Cookie
+// doPrepared 为请求写入 proof 后经账户的 WAA 运行时发送，并写回运行时导出的 Cookie；proof 非空时写入该 proof
 func (t *WorkerProtectedTransport) doPrepared(
 	ctx context.Context,
 	prompt string,
 	page string,
 	proofField int,
+	proof string,
 	selection AccountSelection,
 	rpc RPCRequest,
 ) (*RPCResponse, error) {
-	lease, worker, rpc, err := t.prepareProtectedRequest(ctx, prompt, page, proofField, selection, rpc)
+	lease, worker, rpc, proof, err := t.prepareProtectedRequest(ctx, prompt, page, proofField, proof, selection, rpc)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (t *WorkerProtectedTransport) doPrepared(
 	}
 	reportRequestPhase(ctx, RequestPhaseSendingUpstream)
 	response, err := worker.SendProtected(ctx, ProtectedRequest{
-		URL: rpc.URL, Headers: headers, Body: rpc.Body, Prompt: prompt, PagePrompt: page, ProofField: proofField,
+		URL: rpc.URL, Headers: headers, Body: rpc.Body, Prompt: prompt, PagePrompt: page, ProofField: proofField, Proof: proof,
 	})
 	if err != nil {
 		return nil, err
@@ -197,30 +197,31 @@ func (t *WorkerProtectedTransport) prepareProtectedRequest(
 	prompt string,
 	page string,
 	proofField int,
+	proof string,
 	selection AccountSelection,
 	rpc RPCRequest,
-) (*AccountLease, ProtectedPreparer, RPCRequest, error) {
+) (*AccountLease, ProtectedPreparer, RPCRequest, string, error) {
 	lease, ok := AccountLeaseFromContext(ctx)
 	if !ok {
-		return nil, nil, RPCRequest{}, fmt.Errorf("受保护请求缺少账户租约")
+		return nil, nil, RPCRequest{}, "", fmt.Errorf("受保护请求缺少账户租约")
 	}
 	if err := validateLeaseSelection(lease, selection); err != nil {
-		return nil, nil, RPCRequest{}, err
+		return nil, nil, RPCRequest{}, "", err
 	}
 	worker, err := t.workers.Worker(ctx, lease.Account().ID, selection.ModelID)
 	if err != nil {
-		return nil, nil, RPCRequest{}, fmt.Errorf("获取账户 WAA preparer: %w", err)
+		return nil, nil, RPCRequest{}, "", fmt.Errorf("获取账户 WAA preparer: %w", err)
 	}
 	reportRequestPhase(ctx, RequestPhasePreparingWAA)
 	prepared, err := worker.Prepare(ctx, ProtectedRequest{
 		URL: rpc.URL, Headers: rpc.Header.Clone(), Body: rpc.Body,
-		Prompt: prompt, PagePrompt: page, ProofField: proofField,
+		Prompt: prompt, PagePrompt: page, ProofField: proofField, Proof: proof,
 	})
 	if err != nil {
-		return nil, nil, RPCRequest{}, fmt.Errorf("准备 fresh WAA proof: %w", err)
+		return nil, nil, RPCRequest{}, "", fmt.Errorf("准备 fresh WAA proof: %w", err)
 	}
 	if prepared.Headers == nil || len(prepared.Body) == 0 {
-		return nil, nil, RPCRequest{}, fmt.Errorf("WAA preparer 返回空请求")
+		return nil, nil, RPCRequest{}, "", fmt.Errorf("WAA preparer 返回空请求")
 	}
 	requestHeaders := rpc.Header
 	rpc.AccountID = lease.Account().ID
@@ -233,12 +234,12 @@ func (t *WorkerProtectedTransport) prepareProtectedRequest(
 		}
 	}
 	rpc.Header.Set("Content-Type", JSONProtobufContentType)
-	return lease, worker, rpc, nil
+	return lease, worker, rpc, prepared.Proof, nil
 }
 
 // DoProtectedTitle 写入 GenerateTitle fresh proof 后经 Worker 页面发送请求，binding 为提示词与回答以空格连接，页面输入框为空
 func (t *WorkerProtectedTransport) DoProtectedTitle(ctx context.Context, request TitleRequest, rpc RPCRequest) (*RPCResponse, error) {
-	return t.doPrepared(ctx, request.Prompt+" "+request.Answer, "", 3, AccountSelection{ModelID: request.Model}, rpc)
+	return t.doPrepared(ctx, request.Prompt+" "+request.Answer, "", 3, "", AccountSelection{ModelID: request.Model}, rpc)
 }
 
 func bindingPrompt(request GenerateRequest) (string, error) {
@@ -519,6 +520,16 @@ func (s *PooledService) modelsForLease(ctx context.Context, lease *AccountLease,
 	if err != nil {
 		return nil, s.catalogFailure(leaseCtx, lease, err)
 	}
+	var hidden map[string]string
+	if s.DiscoverHiddenModels {
+		if hidden, err = s.client.DiscoverHiddenModels(leaseCtx, account.ID); err != nil {
+			slog.Warn("探测官网隐藏模型失败", "account", account.ID, "error", err)
+		}
+		models = s.client.accountModels(account.ID)
+	}
+	if err := s.pool.SetHiddenModels(account.ID, hidden, s.DiscoverHiddenModels && err == nil); err != nil {
+		return nil, err
+	}
 	buildEnabled := s.pool.BuildEnabled()
 	var buildModels []Model
 	var buildErr error
@@ -550,10 +561,13 @@ func (s *PooledService) modelsForLease(ctx context.Context, lease *AccountLease,
 	return models, nil
 }
 
-// catalogFailure 认证失败时确认账户会话并把已失效的账户标为需要登录，其余失败记为该账户最近一次目录读取错误
+// catalogFailure 认证失败时确认账户会话并把已失效的账户标为需要登录，Google 拒绝该账户时标为服务受限，其余失败记为该账户最近一次目录读取错误
 func (s *PooledService) catalogFailure(ctx context.Context, lease *AccountLease, err error) error {
 	if DefinitiveAuthenticationFailure(err) {
 		return errors.Join(err, lease.ConfirmAuthenticationFailure(ctx, err))
+	}
+	if denial := RestrictionDenial(err); denial != nil {
+		return errors.Join(err, s.pool.MarkRestricted(lease.Account().ID, denial))
 	}
 	s.pool.recordCatalogFailure(lease.Account().ID, err)
 	return err
@@ -638,26 +652,19 @@ func (s *PooledService) ValidateGenerateRequest(request GenerateRequest) error {
 	return s.client.validateGenerateRequest(request)
 }
 
-// generateTurns 返回 Generate 发往上游前改写的系统指令与对话轮
-func (s *PooledService) generateTurns(request GenerateRequest) ([]string, []Content) {
-	modelID := strings.TrimPrefix(strings.TrimSpace(request.Model), "models/")
-	system, contents := normalizeTurns(request.System, request.Contents, s.rewritesAssistantTail(modelID), s.ContinuationPrompt)
-	if s.YouTubeLinks {
-		contents = attachYouTubeLinks(contents)
-	}
-	if s.StripThoughtSignatures {
-		contents = stripThoughtSignatures(contents)
-	}
-	return system, contents
-}
-
 // Generate 使用支持目标模型的独占账户生成事件流
 func (s *PooledService) Generate(ctx context.Context, request GenerateRequest) (<-chan Event, error) {
 	modelID := strings.TrimPrefix(strings.TrimSpace(request.Model), "models/")
 	if modelID == "" {
 		return nil, fmt.Errorf("%w: GenerateContent model 不能为空", ErrInvalidArgument)
 	}
-	request.System, request.Contents = s.generateTurns(request)
+	request.System, request.Contents = normalizeTurns(request.System, request.Contents, s.rewritesAssistantTail(modelID), s.ContinuationPrompt)
+	if s.YouTubeLinks {
+		request.Contents = attachYouTubeLinks(request.Contents)
+	}
+	if s.StripThoughtSignatures {
+		request.Contents = stripThoughtSignatures(request.Contents)
+	}
 	if len(request.Contents) == 0 {
 		return nil, fmt.Errorf("%w: 请求没有系统提示或对话内容", ErrInvalidArgument)
 	}

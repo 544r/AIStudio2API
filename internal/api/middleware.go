@@ -35,6 +35,8 @@ type accessLogMetadata struct {
 	detached        bool
 	failureStatus   int
 	firstEvent      time.Duration
+	firstOutput     int64
+	trailingError   string
 	upstreamBytes   int64
 	usage           *aistudio.Usage
 	toolCalls       int
@@ -127,7 +129,7 @@ func (metadata *accessLogMetadata) finished(status int, disconnected bool) Acces
 		status = metadata.failureStatus
 	}
 	return AccessLog{
-		Status: status, FirstEvent: metadata.firstEvent, QueueWait: metadata.queueWait, Proof: metadata.proof,
+		Status: status, FirstEvent: metadata.firstEvent, FirstOutput: metadata.firstOutput, TrailingError: metadata.trailingError, QueueWait: metadata.queueWait, Proof: metadata.proof,
 		UpstreamBytes: metadata.upstreamBytes, Usage: metadata.usage, ToolCalls: metadata.toolCalls,
 		InputMessages: metadata.inputMessages, InputTextChars: metadata.inputTextChars,
 		InputMedia: metadata.inputMedia, InputMediaBytes: metadata.inputMediaBytes, InputFiles: metadata.inputFiles,
@@ -192,12 +194,13 @@ func AddAccessLogProof(ctx context.Context, duration time.Duration) {
 	}
 }
 
-// SetAccessLogFirstEvent 写入首个上游语义事件耗时
-func SetAccessLogFirstEvent(ctx context.Context, firstEvent time.Duration) {
+// SetAccessLogFirstEvent 写入首个上游语义事件耗时与该事件所在帧已累计的思考与回复 token 数
+func SetAccessLogFirstEvent(ctx context.Context, firstEvent time.Duration, firstOutput int64) {
 	if metadata, ok := ctx.Value(accessLogContextKey{}).(*accessLogMetadata); ok {
 		metadata.mu.Lock()
 		if metadata.firstEvent == 0 {
 			metadata.firstEvent = firstEvent
+			metadata.firstOutput = firstOutput
 		}
 		metadata.mu.Unlock()
 	}
@@ -340,6 +343,24 @@ func setAccessLogFailureStatus(ctx context.Context, status int) {
 	if metadata, ok := ctx.Value(accessLogContextKey{}).(*accessLogMetadata); ok && status >= http.StatusBadRequest {
 		metadata.mu.Lock()
 		metadata.failureStatus = status
+		metadata.mu.Unlock()
+	}
+}
+
+// ResetAccessLogFirstOutput 在上游从头重新生成时清零首帧已累计的 token 数，重新生成的输出都在首个事件之后到达
+func ResetAccessLogFirstOutput(ctx context.Context) {
+	if metadata, ok := ctx.Value(accessLogContextKey{}).(*accessLogMetadata); ok {
+		metadata.mu.Lock()
+		metadata.firstOutput = 0
+		metadata.mu.Unlock()
+	}
+}
+
+// SetAccessLogTrailingError 写入函数调用之后上游结束生成的错误，请求仍按正常完成记录
+func SetAccessLogTrailingError(ctx context.Context, err error) {
+	if metadata, ok := ctx.Value(accessLogContextKey{}).(*accessLogMetadata); ok {
+		metadata.mu.Lock()
+		metadata.trailingError = strings.TrimSpace(err.Error())
 		metadata.mu.Unlock()
 	}
 }
@@ -491,6 +512,21 @@ func authMiddleware(configuredKeys string, next http.Handler) http.Handler {
 			return
 		}
 		markAccessLogAuthorized(r.Context())
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requestedAccount 返回 X-AIStudio-Account 请求头指定的账户 ID，没有指定时为空
+func requestedAccount(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-AIStudio-Account"))
+}
+
+// accountContextMiddleware 把 X-AIStudio-Account 请求头指定的账户放进请求上下文，账户池只用该账户
+func accountContextMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if accountID := requestedAccount(r); accountID != "" {
+			r = r.WithContext(aistudio.ContextWithAccount(r.Context(), accountID))
+		}
 		next.ServeHTTP(w, r)
 	})
 }

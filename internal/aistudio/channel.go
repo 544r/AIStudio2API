@@ -17,8 +17,6 @@ const (
 	ChannelPlayground Channel = "playground"
 	// ChannelBuild 表示官网 Build 应用代理的 Gemini API 调用
 	ChannelBuild Channel = "build"
-	// ChannelAssistant 表示官网 Build 写代码助手，只服务 -build 模型
-	ChannelAssistant Channel = "assistant"
 )
 
 // ChannelCooldownScope 返回通道在作用域上的冷却键，Build 使用 build:<作用域>
@@ -80,6 +78,31 @@ func ContextWithAPIKey(ctx context.Context, key string) context.Context {
 	return context.WithValue(ctx, apiKeyContextKey{}, key)
 }
 
+// accountContextKey 是请求上下文中指定账户的键
+type accountContextKey struct{}
+
+// ContextWithAccount 返回带有请求指定账户的上下文，账户池只用该账户
+func ContextWithAccount(ctx context.Context, accountID string) context.Context {
+	return context.WithValue(ctx, accountContextKey{}, accountID)
+}
+
+// contextAccount 返回请求上下文中指定的账户 ID，没有指定时为空
+func contextAccount(ctx context.Context) string {
+	accountID, _ := ctx.Value(accountContextKey{}).(string)
+	return accountID
+}
+
+// ContextWithSelectionScope 返回带有 source 中所用 API key 与指定账户的 ctx，供跨请求的操作沿用发起请求的选号范围
+func ContextWithSelectionScope(ctx, source context.Context) context.Context {
+	if key, ok := source.Value(apiKeyContextKey{}).(string); ok {
+		ctx = ContextWithAPIKey(ctx, key)
+	}
+	if accountID := contextAccount(source); accountID != "" {
+		ctx = ContextWithAccount(ctx, accountID)
+	}
+	return ctx
+}
+
 // SetAPIKeyAccounts 设置各 API key 可用的账户 ID，未列出的 key 可用全部账户
 func (p *AccountPool) SetAPIKeyAccounts(accounts map[string][]string) {
 	p.mu.Lock()
@@ -88,8 +111,11 @@ func (p *AccountPool) SetAPIKeyAccounts(accounts map[string][]string) {
 	p.notifyLocked()
 }
 
-// scopedSelection 把请求所用 API key 与模型绑定的账户并入选择的允许账户，指定账户与绑定资源的选择不受模型绑定限制
+// scopedSelection 把请求指定的账户、所用 API key 与模型绑定的账户并入选择，指定账户与绑定资源的选择不受模型绑定限制
 func (p *AccountPool) scopedSelection(ctx context.Context, selection AccountSelection) AccountSelection {
+	if selection.AccountID == "" {
+		selection.AccountID = contextAccount(ctx)
+	}
 	key, _ := ctx.Value(apiKeyContextKey{}).(string)
 	p.mu.Lock()
 	keyScope, keyBound := p.apiKeyAccounts[key]
@@ -153,9 +179,6 @@ func (l *AccountLease) CooldownScope(scope string) string {
 }
 
 func (p *AccountPool) channelEnabledLocked(channel Channel) bool {
-	if channel == ChannelAssistant {
-		return true
-	}
 	if len(p.channels) == 0 {
 		return channel == ChannelPlayground
 	}
@@ -187,9 +210,6 @@ func buildMethodSelection(selection AccountSelection) bool {
 
 // selectionChannelsLocked 返回选择可使用的通道顺序，优先通道排在首位，限定通道的模型只使用该通道
 func (p *AccountPool) selectionChannelsLocked(selection AccountSelection) []Channel {
-	if p.assistantModelLocked(selection.ModelID) {
-		return []Channel{ChannelAssistant}
-	}
 	if !generationChannelSelection(selection) {
 		if buildMethodSelection(selection) && p.channelEnabledLocked(ChannelBuild) {
 			if selection.Method == "embedContent" || selection.Channel == ChannelBuild {
@@ -254,8 +274,6 @@ func (p *AccountPool) channelSupportsLocked(account *Account, channel Channel, s
 		}
 		return generationChannelSelection(selection) && p.channelEnabledLocked(ChannelBuild) &&
 			p.buildSupportsModelLocked(account, selection.ModelID, selection.anyTier)
-	case ChannelAssistant:
-		return accountSupportsSelection(account, selection)
 	default:
 		return false
 	}
@@ -321,17 +339,6 @@ func (p *AccountPool) channelCandidatesLocked(indices []int, selection AccountSe
 		return lastChannel != "" && rank(candidates[position].channel) > rank(lastChannel)
 	})
 	return append(candidates[start:], candidates[:start]...)
-}
-
-// AssistantModel 判断模型是否为经 Build 写代码助手生成的 -build 模型
-func (p *AccountPool) AssistantModel(modelID string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.assistantModelLocked(modelID)
-}
-
-func (p *AccountPool) assistantModelLocked(modelID string) bool {
-	return p.modelCapabilityLocked(modelID, "assistant_route")
 }
 
 // InteractionAgentModel 判断模型是否为经 CreateInteraction 后台任务生成的 agent，如 Deep Research 与 Antigravity

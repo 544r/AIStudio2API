@@ -334,7 +334,7 @@ func sendBidiClientMessages(
 				err = session.SendMusicPrompts(ctx, message.WeightedPrompts)
 			case "music_config":
 				var config []byte
-				config, _, err = geminiCamelKeys(message.MusicConfig)
+				config, err = geminiCamelKeys(message.MusicConfig)
 				if err == nil {
 					err = session.SendMusicConfig(ctx, config)
 				}
@@ -385,7 +385,7 @@ func (s *server) writeBidiEvents(
 				return
 			}
 			if first {
-				SetAccessLogFirstEvent(r.Context(), time.Since(startedAt))
+				SetAccessLogFirstEvent(r.Context(), time.Since(startedAt), 0)
 				first = false
 			}
 			message := mapBidiServerEvent(event)

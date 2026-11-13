@@ -392,7 +392,7 @@ func (s *server) handleGeminiModel(w http.ResponseWriter, r *http.Request) {
 }
 
 // geminiServedMethods 是本服务以 Gemini API 形式提供的模型方法
-var geminiServedMethods = []string{"generateContent", "countTokens", "createCachedContent", "embedContent", "batchEmbedContents", "predict", "predictLongRunning"}
+var geminiServedMethods = []string{"generateContent", "countTokens", "createCachedContent", "embedContent", "batchEmbedContents", "predict", "predictLongRunning", "createDecision"}
 
 func geminiModelObject(model aistudio.Model) map[string]any {
 	methods := make([]string, 0, len(model.Methods))
@@ -524,7 +524,7 @@ func (s *server) handleGeminiAction(w http.ResponseWriter, r *http.Request) {
 func decodeGeminiJSON(r *http.Request, target any) error {
 	body, err := io.ReadAll(r.Body)
 	if err == nil {
-		body, _, err = geminiCamelKeys(body)
+		body, err = geminiCamelKeys(body)
 	}
 	if err == nil {
 		err = json.Unmarshal(body, target)
@@ -545,62 +545,110 @@ var geminiOpaqueFields = map[string]bool{
 }
 
 // geminiCamelKeys 按 proto3 JSON 规则把各层消息字段名转为 lowerCamelCase，同层两种写法并存时保留驼峰字段，自由 JSON 字段的取值原样保留
-func geminiCamelKeys(raw []byte) ([]byte, bool, error) {
+func geminiCamelKeys(raw []byte) ([]byte, error) {
 	value := bytes.TrimSpace(raw)
 	if len(value) == 0 || value[0] != '{' && value[0] != '[' {
-		return raw, false, nil
+		return raw, nil
 	}
 	if camel, err := geminiKeysCamel(value); err == nil && camel {
-		return raw, false, nil
+		return raw, nil
 	}
-	changed := false
-	if value[0] == '[' {
-		var items []json.RawMessage
-		if err := json.Unmarshal(value, &items); err != nil {
-			return nil, false, err
+	output := bytes.NewBuffer(make([]byte, 0, len(value)))
+	if err := writeGeminiCamelKeys(output, value); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+// writeGeminiCamelKeys 把 JSON 对象或数组 value 中各层消息字段名转为 lowerCamelCase 后写入 output，字段取值按原字节写出，根值之后还有其他内容时返回错误
+func writeGeminiCamelKeys(output *bytes.Buffer, value []byte) error {
+	decoder := jsontext.NewDecoder(bytes.NewBuffer(value), jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
+	// end 读取根值的结束括号，确认其后只有空白
+	end := func() error {
+		if _, err := decoder.ReadToken(); err != nil {
+			return err
 		}
-		for index, item := range items {
-			converted, itemChanged, err := geminiCamelKeys(item)
+		if _, err := decoder.ReadToken(); err != io.EOF {
+			return cmp.Or(err, errors.New("unexpected data after top-level value"))
+		}
+		return nil
+	}
+	// next 读取下一个值，返回它在 value 中的原字节
+	next := func() ([]byte, error) {
+		item, err := decoder.ReadValue()
+		end := decoder.InputOffset()
+		return value[end-int64(len(item)) : end], err
+	}
+	write := func(item []byte, opaque bool) error {
+		if opaque || item[0] != '{' && item[0] != '[' {
+			output.Write(item)
+			return nil
+		}
+		return writeGeminiCamelKeys(output, item)
+	}
+	open, err := decoder.ReadToken()
+	if err != nil {
+		return err
+	}
+	if open.Kind() == '[' {
+		output.WriteByte('[')
+		for index := 0; decoder.PeekKind() != ']'; index++ {
+			item, err := next()
 			if err != nil {
-				return nil, false, err
+				return err
 			}
-			items[index], changed = converted, changed || itemChanged
-		}
-		if !changed {
-			return raw, false, nil
-		}
-		encoded, err := json.Marshal(items)
-		return encoded, true, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(value, &fields); err != nil {
-		return nil, false, err
-	}
-	converted := make(map[string]json.RawMessage, len(fields))
-	for key, field := range fields {
-		name := geminiJSONName(key)
-		if name != key {
-			changed = true
-			if _, exists := fields[name]; exists {
-				continue
+			if index > 0 {
+				output.WriteByte(',')
+			}
+			if err := write(item, false); err != nil {
+				return err
 			}
 		}
-		if !geminiOpaqueFields[name] {
-			var fieldChanged bool
-			var err error
-			field, fieldChanged, err = geminiCamelKeys(field)
-			if err != nil {
-				return nil, false, err
-			}
-			changed = changed || fieldChanged
+		output.WriteByte(']')
+		return end()
+	}
+	type member struct {
+		key   string
+		value []byte
+	}
+	var members []member
+	keys := make(map[string]bool)
+	for decoder.PeekKind() != '}' {
+		token, err := decoder.ReadToken()
+		if err != nil {
+			return err
 		}
-		converted[name] = field
+		key := token.String()
+		item, err := next()
+		if err != nil {
+			return err
+		}
+		members = append(members, member{key: key, value: item})
+		keys[key] = true
 	}
-	if !changed {
-		return raw, false, nil
+	output.WriteByte('{')
+	written := 0
+	for _, field := range members {
+		name := geminiJSONName(field.key)
+		if name != field.key && keys[name] {
+			continue
+		}
+		if written > 0 {
+			output.WriteByte(',')
+		}
+		written++
+		quoted, err := jsontext.AppendQuote(output.AvailableBuffer(), name)
+		if err != nil {
+			return err
+		}
+		output.Write(quoted)
+		output.WriteByte(':')
+		if err := write(field.value, geminiOpaqueFields[name]); err != nil {
+			return err
+		}
 	}
-	encoded, err := json.Marshal(converted)
-	return encoded, true, err
+	output.WriteByte('}')
+	return end()
 }
 
 // geminiKeysCamel 逐个读取 JSON token，判断各层消息字段名是否都已是 lowerCamelCase，不读取自由 JSON 字段的取值
@@ -1305,7 +1353,9 @@ func (s *server) handleGeminiGenerate(w http.ResponseWriter, r *http.Request, re
 	defer candidates.cancel()
 	if err := candidates.err; err != nil {
 		candidates.settle(r.Context())
-		writeGeminiFailure(w, r, request, err, stream)
+		if shouldWriteRequestError(r, err) {
+			writeGeminiRequestError(w, err)
+		}
 		return
 	}
 	if stream {
@@ -1324,50 +1374,13 @@ func (s *server) handleGeminiGenerate(w http.ResponseWriter, r *http.Request, re
 	})
 	if err != nil {
 		candidates.settle(r.Context())
-		writeGeminiFailure(w, r, request, err, false)
+		if shouldWriteRequestError(r, err) {
+			writeGeminiRequestError(w, err)
+		}
 		return
 	}
 	candidates.record(r.Context(), results)
 	writeJSON(w, http.StatusOK, officialOrder("gemini", buildGeminiResponse(request, output.cache, results)))
-}
-
-// writeGeminiFailure 写出响应头之前的生成失败，上游拒绝输入时按 Gemini API 返回 200 与 promptFeedback
-func writeGeminiFailure(w http.ResponseWriter, r *http.Request, request aistudio.GenerateRequest, err error, stream bool) {
-	if !shouldWriteRequestError(r, err) {
-		return
-	}
-	response, ok := geminiPromptFeedback(request, err)
-	switch {
-	case !ok:
-		writeGeminiRequestError(w, err)
-	case stream:
-		if output, err := openGeminiStream(w, r); err == nil {
-			_ = output.write(response)
-			output.close()
-		}
-	default:
-		writeJSON(w, http.StatusOK, officialOrder("gemini", response))
-	}
-}
-
-// geminiPromptFeedback 把上游输入拒绝投影为不含候选的 Gemini 响应
-func geminiPromptFeedback(request aistudio.GenerateRequest, err error) (map[string]any, bool) {
-	var feedback *aistudio.PromptFeedbackError
-	if !errors.As(err, &feedback) {
-		return nil, false
-	}
-	reason := strings.ToUpper(strings.TrimSpace(feedback.Reason))
-	if reason == "" || reason == "UNSPECIFIED" {
-		reason = "BLOCK_REASON_UNSPECIFIED"
-	}
-	block := map[string]any{"blockReason": reason}
-	if feedback.Message != "" {
-		block["blockReasonMessage"] = feedback.Message
-	}
-	if len(feedback.SafetyRatings) > 0 {
-		block["safetyRatings"] = feedback.SafetyRatings
-	}
-	return map[string]any{"promptFeedback": block, "modelVersion": request.Model, "responseId": request.ID}, true
 }
 
 // buildGeminiResponse 按候选序号输出各候选内容与终止原因，用量为全部候选之和，cache 非空时计入缓存部分
@@ -1776,6 +1789,23 @@ func (stream *geminiStream) write(value map[string]any) error {
 	return http.NewResponseController(stream.w).Flush()
 }
 
+// fail 写出流内错误：SSE 按官方 SDK 的解析方式写成不带 data: 前缀的整块 JSON，JSON 数组中写为一个元素
+func (stream *geminiStream) fail(value map[string]any) error {
+	if stream.keepalive == nil {
+		return stream.write(value)
+	}
+	data, err := json.Marshal(officialOrder("gemini", value))
+	if err != nil {
+		return err
+	}
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	if _, err := stream.w.Write(append(data, '\n')); err != nil {
+		return err
+	}
+	return http.NewResponseController(stream.w).Flush()
+}
+
 // close 停止 SSE 心跳，或结束 JSON 数组
 func (stream *geminiStream) close() {
 	if stream.keepalive != nil {
@@ -1856,11 +1886,7 @@ func (s *server) streamGemini(w http.ResponseWriter, r *http.Request, request ai
 		if !shouldWriteRequestError(r, err) {
 			return
 		}
-		if response, ok := geminiPromptFeedback(request, err); ok {
-			_ = write(response)
-			return
-		}
-		_ = write(map[string]any{"error": map[string]any{
+		_ = stream.fail(map[string]any{"error": map[string]any{
 			"code": statusFromError(err), "message": err.Error(), "status": geminiErrorStatus(err),
 		}})
 		return
