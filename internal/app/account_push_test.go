@@ -136,3 +136,19 @@ func TestMergePushedCookiesOverridesByKeyOnly(t *testing.T) {
 		t.Fatalf("merged length = %d, want 3", len(merged))
 	}
 }
+
+// TestNormalizePushEmails 验证白名单邮箱按逗号、分号与空白拆分、小写去重，空输入返回 nil。
+func TestNormalizePushEmails(t *testing.T) {
+	got := normalizePushEmails([]string{" Sub1@Example.com , sub2@example.com; sub3@example.com", "SUB1@example.com", ""})
+	if len(got) != 3 {
+		t.Fatalf("白名单 = %v, want 3 个", got)
+	}
+	for _, want := range []string{"sub1@example.com", "sub2@example.com", "sub3@example.com"} {
+		if _, ok := got[want]; !ok {
+			t.Fatalf("白名单缺少 %q: %v", want, got)
+		}
+	}
+	if got := normalizePushEmails([]string{" ", ",", ";"}); got != nil {
+		t.Fatalf("空白名单 = %v, want nil", got)
+	}
+}

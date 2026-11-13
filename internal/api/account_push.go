@@ -22,6 +22,10 @@ type AccountPushInput struct {
 	Source       string                `json:"source,omitempty"`
 	// DiscoverAll 表示按同一份登录罐识别并登记全部 u/N 子号
 	DiscoverAll bool `json:"discover_all"`
+	// AllowedEmails 是白名单模式允许刷新的账户邮箱，非空时子号识别只登记这些邮箱
+	AllowedEmails []string `json:"allowed_emails,omitempty"`
+	// SkipCurrent 表示当前页面账号不在白名单，只登记白名单中的其它子号
+	SkipCurrent bool `json:"skip_current,omitempty"`
 }
 
 // AccountPushResult 是一次推送的结果：账户为推送后的摘要，SessionValid 只在本次推送
@@ -45,6 +49,10 @@ type accountPushRequest struct {
 	AccountID   string          `json:"account_id"`
 	Source      string          `json:"source"`
 	DiscoverAll *bool           `json:"discover_all"`
+	// AllowedEmails 是脚本白名单里允许刷新的邮箱，空时不过滤
+	AllowedEmails []string `json:"allowed_emails"`
+	// SkipCurrent 表示不刷新当前页面账号，只按登录罐登记白名单中的其它子号
+	SkipCurrent bool `json:"skip_current"`
 }
 
 // handleAccountPushCookies 接收用户脚本推送的 Cookie 罐并导入或刷新账户，不经过管理会话。
@@ -86,12 +94,14 @@ func (s *server) handleAccountPushCookies(w http.ResponseWriter, r *http.Request
 		discoverAll = *input.DiscoverAll
 	}
 	result, err := s.config.Admin.PushAccountCookies(r.Context(), AccountPushInput{
-		StorageState: state,
-		AuthUser:     authUser,
-		Email:        strings.ToLower(strings.TrimSpace(input.Email)),
-		AccountID:    strings.ToLower(strings.TrimSpace(input.AccountID)),
-		Source:       strings.TrimSpace(input.Source),
-		DiscoverAll:  discoverAll,
+		StorageState:  state,
+		AuthUser:      authUser,
+		Email:         strings.ToLower(strings.TrimSpace(input.Email)),
+		AccountID:     strings.ToLower(strings.TrimSpace(input.AccountID)),
+		Source:        strings.TrimSpace(input.Source),
+		DiscoverAll:   discoverAll,
+		AllowedEmails: input.AllowedEmails,
+		SkipCurrent:   input.SkipCurrent,
 	})
 	if err != nil {
 		writeAdminUpstreamError(w, err)

@@ -110,6 +110,29 @@ func TestAccountPushDiscoverAllOptOut(t *testing.T) {
 	}
 }
 
+// TestAccountPushAllowedEmails 验证白名单邮箱与 skip_current 被原样传给管理服务
+func TestAccountPushAllowedEmails(t *testing.T) {
+	admin := &pushAdmin{}
+	handler := NewHandler(nil, Config{Admin: admin, AccountPushToken: "secret"})
+	body := `{"cookies":` + pushCookiesJSON + `,"email":"main@example.com","discover_all":true,` +
+		`"allowed_emails":["Sub1@Example.com","sub2@example.com"],"skip_current":true}`
+	request := httptest.NewRequest("POST", "/api/accounts/push-cookies", strings.NewReader(body))
+	request.Header.Set("X-Push-Token", "secret")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("推送 = %d %s", recorder.Code, recorder.Body)
+	}
+	if len(admin.inputs) != 1 {
+		t.Fatalf("输入次数 = %d", len(admin.inputs))
+	}
+	input := admin.inputs[0]
+	if !input.SkipCurrent || len(input.AllowedEmails) != 2 ||
+		input.AllowedEmails[0] != "Sub1@Example.com" || input.AllowedEmails[1] != "sub2@example.com" {
+		t.Fatalf("输入 = %+v", input)
+	}
+}
+
 // TestAccountPushCookieText 验证 cookies 也接受 Cookie 请求头文本，auth_user 越界被拒绝
 func TestAccountPushCookieText(t *testing.T) {
 	admin := &pushAdmin{}

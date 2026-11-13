@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AIStudio2API Cookie Pusher
 // @namespace    aistudio2api-push
-// @version      1.1.0
+// @version      1.2.0
 // @description  定时把 AI Studio 页面的最新 Cookie 罐推送到自建 AIStudio2API 服务，按 u/N 序号自动导入或刷新账户，替代手动粘贴
 // @author       aistudio2api
 // @match        https://aistudio.google.com/*
@@ -30,8 +30,9 @@
  * 3. 篡改猴 需把「允许脚本访问 Cookie」设为 all，否则读不到 HttpOnly 的会话 Cookie：
  *    管理面板 → 设置 → 配置模式选「高级」→ 安全栏 → 设为 all → 保存。
  * 4. 首次推送时 篡改猴 会弹出"连接到 xxx"的授权框，选「总是允许」。
- * 5. 多账号浏览器建议点「👤 设置允许推送的账号」，填入小号邮箱：停在主号
- *    页面（常见于默认的 /u/0/）时自动推送会直接跳过，不会把主号传上去。
+ * 5. 多账号浏览器建议点「👤 设置允许推送的账号」，填入要推送的小号邮箱（可多个，
+ *    逗号/空格分隔）：停在主号页面（常见于默认的 /u/0/）时不会推主号，只按登录罐
+ *    登记白名单里的子号；一次推送可同时刷新白名单内的多个 u/N。
  * 6. 页面加载后自动推一次，之后按设定间隔重推（默认 60 分钟）；右下角胶囊
  *    显示最近一次结果，点击胶囊立即手动推送。
  * 7. 长期挂机可选两个保护（菜单里开关，默认关闭）：
@@ -101,7 +102,7 @@
     const STORE_REFRESH_MIN = "a2a_refresh_min";
     const STORE_LAST_REFRESH = "a2a_last_refresh";
 
-    const SCRIPT_VERSION = "1.1.0";
+    const SCRIPT_VERSION = "1.2.0";
     const UPDATE_URL =
         "https://raw.githubusercontent.com/544r/AIStudio2API/main/userscripts/aistudio2api-cookie-push.user.js";
     const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -589,20 +590,13 @@
             }
 
             const detectedEmail = detectEmail().toLowerCase();
-            if (cfg.allowedEmails.length) {
-                if (!detectedEmail) {
-                    log(
-                        "⚠ 无法识别当前页面账号邮箱，白名单模式下已跳过本次推送。" +
-                            "请在该账号的 AI Studio 页面手动点「立即推送」，或清空白名单"
-                    );
-                    setBadge("error", "无法识别账号，已跳过");
-                    return;
-                }
-                if (!cfg.allowedEmails.includes(detectedEmail)) {
-                    log(`⚠ 当前账号 ${detectedEmail} 不在白名单内，已跳过推送`);
-                    setBadge("error", "账号不在白名单");
-                    return;
-                }
+            const allowed = cfg.allowedEmails;
+            const currentAllowed = !allowed.length || (detectedEmail && allowed.includes(detectedEmail));
+            if (allowed.length && !detectedEmail) {
+                log("⚠ 识别不到当前页面账号邮箱，只登记白名单里的其它子号");
+            }
+            if (allowed.length && detectedEmail && !currentAllowed) {
+                log(`⚠ 当前账号 ${detectedEmail} 不在白名单，只登记白名单里的其它子号`);
             }
 
             const payload = {
@@ -611,9 +605,10 @@
                 email: detectedEmail || undefined,
                 account_id: getBoundAccountId() || undefined,
                 source: "userscript",
-                // 多账号浏览器共用一份登录罐：让服务端顺手把全部 u/N 子号都登记上。
-                // 设置了白名单时关闭，避免把用户明确排除的主号也带上去。
-                discover_all: cfg.allowedEmails.length === 0,
+                // 多账号浏览器共用一份登录罐：让服务端按 allowed_emails 过滤后登记白名单子号。
+                discover_all: true,
+                allowed_emails: allowed.length ? allowed : undefined,
+                skip_current: allowed.length > 0 && !currentAllowed,
             };
             const headers = {
                 "Content-Type": "application/json",
@@ -631,27 +626,35 @@
             } catch (_) {}
 
             const account = (data && data.account) || {};
-            if (response.status === 200 && account.id) {
-                setBoundAccountId(account.id);
+            const discovered = Number(data.discovered_accounts || 0);
+            if (response.status === 200 && (account.id || discovered > 0)) {
+                if (account.id) setBoundAccountId(account.id);
                 const validText =
                     data.session_valid === true
                         ? "登录态有效"
                         : data.session_valid === false
                           ? "登录态已失效"
                           : "登录态未验证";
-                const text =
-                    `✅ 已推送（${validText}）` +
-                    (data.created ? "，新建账户" : "，刷新账户") +
-                    (data.discovered_accounts > 0
-                        ? `，自动登记 ${data.discovered_accounts} 个子号`
-                        : "") +
-                    ` · ${account.label || account.id}`;
+                let action = "";
+                if (account.id) action += data.created ? "，新建账户" : "，刷新账户";
+                if (discovered > 0) action += `，自动登记 ${discovered} 个子号`;
+                const label = account.label || account.id;
+                const text = `✅ 已推送（${validText}）` + action + (label ? ` · ${label}` : "");
                 if (data.discovery_error) log(`⚠ 子号识别失败: ${data.discovery_error}`);
                 log(text);
                 state.lastPushAt = Date.now();
                 state.lastPushText = new Date().toLocaleString("zh-CN", { hour12: false });
                 state.lastResult = text;
                 setBadge("ok", `${validText} · ${shortTime()}`);
+            } else if (response.status === 200) {
+                const detail =
+                    data.discovery_error ||
+                    (cfg.allowedEmails.length
+                        ? "当前账号不在白名单，且没有发现可登记的子号"
+                        : "服务端没有返回账户");
+                log(`⚠ ${detail}`);
+                state.lastResult = detail;
+                setBadge("error", "无可登记账号");
             } else {
                 const detail = errorMessage(data, response.status);
                 log(`❌ 推送失败 [${response.status}]: ${detail}`);

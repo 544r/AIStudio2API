@@ -15,7 +15,8 @@ import (
 
 // PushAccountCookies 用用户脚本推送的 Cookie 罐刷新已有账户，账户不存在时按推送的
 // auth_user 验证登录的邮箱并导入新账户。开启 discover_all 时还会按共享登录罐识别
-// 其它 u/N 子号，一次推送把所有已登录账号都登记上。
+// 其它 u/N 子号，一次推送把所有已登录账号都登记上；白名单非空时只登记名单内的邮箱，
+// skip_current 表示当前页面账号不在白名单，只登记名单内的其它子号。
 func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.AccountPushInput) (api.AccountPushResult, error) {
 	state := input.StorageState
 	if err := state.Validate(); err != nil {
@@ -25,14 +26,20 @@ func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.Acc
 		return api.AccountPushResult{}, invalidAccount(fmt.Errorf("认证状态无法用于 AI Studio: %w", err))
 	}
 
+	allowed := normalizePushEmails(input.AllowedEmails)
+	if input.SkipCurrent && len(allowed) == 0 {
+		return api.AccountPushResult{}, invalidAccount(errors.New("skip_current 需要提供 allowed_emails"))
+	}
+
 	// 邮箱来自当前 u/N 页面的 WIZ 数据，比历史绑定更可信：多登录顺序变化后
 	// 绑定可能指向别的子号，因此有邮箱时以邮箱为准，绑定只在识别不到邮箱时兜底。
 	accountID := strings.ToLower(strings.TrimSpace(input.Email))
 	if accountID == "" {
 		accountID = strings.ToLower(strings.TrimSpace(input.AccountID))
 	}
+	skipCurrent := input.SkipCurrent
 	verified := false
-	if accountID == "" {
+	if accountID == "" && !skipCurrent {
 		// 脚本没给出账户时按 auth_user 打开对话页，识别这个会话登录的邮箱，
 		// 多账号浏览器里推送的是哪个子号就以哪个子号的邮箱落库。
 		verification, err := chromeauth.VerifyAuthUser(ctx, &state, admin.effectiveProxy(""), input.AuthUser)
@@ -47,14 +54,31 @@ func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.Acc
 		accountID = strings.ToLower(strings.TrimSpace(verification.Email))
 		verified = true
 	}
+	if accountID != "" && len(allowed) > 0 {
+		if _, ok := allowed[accountID]; !ok {
+			skipCurrent = true
+		}
+	}
+	if skipCurrent && !input.DiscoverAll {
+		return api.AccountPushResult{}, invalidAccount(errors.New("skip_current 需要同时开启 discover_all"))
+	}
 
-	account, created, err := admin.upsertPushedAccount(ctx, accountID, input, state)
-	if err != nil {
-		return api.AccountPushResult{}, err
+	var account api.AdminAccount
+	var created bool
+	if skipCurrent {
+		// 当前页面是白名单外的号（例如主号 /u/0）：不刷新它，只按同一份登录罐
+		// 识别并登记白名单里的其它子号。
+		admin.requests.log(accountID, "INFO", "用户脚本推送跳过当前账号（不在白名单）")
+	} else {
+		var err error
+		account, created, err = admin.upsertPushedAccount(ctx, accountID, input, state)
+		if err != nil {
+			return api.AccountPushResult{}, err
+		}
 	}
 	result := api.AccountPushResult{Account: account, Created: created}
 	if input.DiscoverAll {
-		discovered, discoveryErr := admin.discoverPushedAccounts(ctx, state, input, accountID)
+		discovered, discoveryErr := admin.discoverPushedAccounts(ctx, state, input, accountID, allowed)
 		result.Discovered = discovered
 		if discoveryErr != nil {
 			result.DiscoveryError = discoveryErr.Error()
@@ -65,6 +89,32 @@ func (admin *runtimeAdmin) PushAccountCookies(ctx context.Context, input api.Acc
 	}
 	result.SessionValid = verifiedPointer(verified)
 	return result, nil
+}
+
+// pushEmailLimit 是一次推送最多接受的白名单邮箱数
+const pushEmailLimit = 32
+
+// normalizePushEmails 把白名单邮箱小写、去空白、去重，空列表返回 nil
+func normalizePushEmails(values []string) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		for _, item := range strings.FieldsFunc(value, func(r rune) bool {
+			return r == ',' || r == ';' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+		}) {
+			email := strings.ToLower(strings.TrimSpace(item))
+			if email == "" || len(allowed) >= pushEmailLimit {
+				continue
+			}
+			allowed[email] = struct{}{}
+		}
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	return allowed
 }
 
 // upsertPushedAccount 刷新已有账户或导入新账户，返回账户与是否为新建
@@ -98,12 +148,14 @@ func (admin *runtimeAdmin) upsertPushedAccount(
 	return account, true, nil
 }
 
-// discoverPushedAccounts 按同一份登录罐识别全部 u/N 子号，把未登记的账号一并导入
+// discoverPushedAccounts 按同一份登录罐识别 u/N 子号，把未登记的账号一并导入；
+// allowed 非空时只登记名单内的邮箱。
 func (admin *runtimeAdmin) discoverPushedAccounts(
 	ctx context.Context,
 	state aistudio.StorageState,
 	input api.AccountPushInput,
 	primary string,
+	allowed map[string]struct{},
 ) (int, error) {
 	accounts, err := chromeauth.DiscoverCookieAccounts(ctx, &state, admin.effectiveProxy(""))
 	if err != nil {
@@ -115,6 +167,11 @@ func (admin *runtimeAdmin) discoverPushedAccounts(
 		email := strings.ToLower(strings.TrimSpace(item.Email))
 		if email == "" || email == primary {
 			continue
+		}
+		if len(allowed) > 0 {
+			if _, ok := allowed[email]; !ok {
+				continue
+			}
 		}
 		pushed := api.AccountPushInput{
 			AuthUser: item.AuthUser, Email: email, Source: input.Source,
