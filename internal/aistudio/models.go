@@ -142,8 +142,17 @@ func parseModelCatalog(source io.Reader) (modelCatalog, error) {
 		catalog.models = append(catalog.models, entry.model)
 		catalog.entries[entry.model.ID] = entry
 	}
-	// Build 写代码助手通道已移除：不再由 code_assistant 能力派生 -build 模型，
-	// 该通道每轮请求都会调用 CreateApplet 在账号中创建应用对象。
+	for _, base := range catalog.models {
+		if !base.Capabilities["code_assistant"] {
+			continue
+		}
+		entry := assistantModelEntry(catalog.entries[base.ID])
+		if _, exists := catalog.entries[entry.model.ID]; exists {
+			continue
+		}
+		catalog.models = append(catalog.models, entry.model)
+		catalog.entries[entry.model.ID] = entry
+	}
 	return catalog, nil
 }
 

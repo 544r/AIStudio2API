@@ -350,7 +350,7 @@ export const messages: Record<TranslationKey, string> = {
     'Build 채널은 업스트림에서 중단되었으며, 거부된 요청은 기본 채널로 완료됩니다',
   'settings.channelRow': '{channel} 채널',
   'settings.upstreamChannelsHelp':
-    '생성은 Playground 채널만 사용합니다. Build 채널은 제거되었습니다(계정에 앱 객체를 생성하기 때문).',
+    '기본은 Playground. Build는 이전 채널로 업스트림 생성 중단. 켜면 거부된 요청은 Playground로 완료',
   'settings.modelMapping': '모델 매핑',
   'settings.modelMappingHelp': '왼쪽 모델 이름으로 온 요청에 오른쪽 모델을 사용합니다',
   'settings.modelChannels': '모델 채널',

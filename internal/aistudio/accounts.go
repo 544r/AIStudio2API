@@ -775,32 +775,24 @@ func accountSupportsSelection(account *Account, selection AccountSelection) bool
 	return false
 }
 
-// CatalogModels 返回完整目录，每项带有启用账户可以调用的通道，按 callableFirst 排列。
-// 已移除的 Build 写代码助手模型（-build）即使命中旧缓存也不再列出。
+// CatalogModels 返回完整目录，每项带有启用账户可以调用的通道，按 callableFirst 排列
 func (p *AccountPool) CatalogModels(models []Model) []Model {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	catalog := make([]Model, 0, len(models))
-	for _, model := range models {
-		if IsRetiredBuildModel(model.ID) {
-			continue
-		}
+	catalog := make([]Model, len(models))
+	for index, model := range models {
 		model.Channels = p.modelChannelsLocked(model, false)
-		catalog = append(catalog, model)
+		catalog[index] = model
 	}
 	return callableFirst(catalog)
 }
 
-// PublicModels 返回已启用通道可以提供的目录项，只因账户权益不足而无法调用的模型同样列出且通道为空，按 callableFirst 排列。
-// 已移除的 Build 写代码助手模型（-build）即使命中旧缓存也不再列出。
+// PublicModels 返回已启用通道可以提供的目录项，只因账户权益不足而无法调用的模型同样列出且通道为空，按 callableFirst 排列
 func (p *AccountPool) PublicModels(models []Model) []Model {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	public := make([]Model, 0, len(models))
 	for _, model := range models {
-		if IsRetiredBuildModel(model.ID) {
-			continue
-		}
 		model.Channels = p.modelChannelsLocked(model, false)
 		if len(model.Channels) == 0 && len(p.modelChannelsLocked(model, true)) == 0 {
 			continue

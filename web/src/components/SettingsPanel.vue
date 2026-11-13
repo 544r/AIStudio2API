@@ -138,8 +138,7 @@ const section = useQueryParam<SectionID>(
 )
 const current = computed(() => sections.find((item) => item.id === section.value)!)
 
-// Build 通道已移除：写代码助手会在账号中创建应用对象，面板不再提供该选项
-const upstreamChannelOptions: UpstreamChannel[] = ['playground']
+const upstreamChannelOptions: UpstreamChannel[] = ['playground', 'build']
 const waaBackendOptions: { value: ServiceConfig['waa_backend']; label: TranslationKey }[] = [
   { value: 'camoufox', label: 'settings.waaBackendCamoufox' },
   { value: 'spidermonkey', label: 'settings.waaBackendSpiderMonkey' },
@@ -785,6 +784,18 @@ async function saveConfig(): Promise<void> {
               "
               :env="environmentKey('upstream_channels')"
             >
+              <template v-if="channel === 'build'" #tag>
+                <span class="text-xs text-gray-500">{{ t('settings.legacy') }}</span>
+              </template>
+              <template
+                v-if="channel === 'build' && form.upstream_channels.includes('build')"
+                #note
+              >
+                <p class="mt-1 flex items-start gap-1.5 text-xs leading-5 text-gray-400">
+                  <UiIcon name="warning" :size="13" class="mt-1 text-amber-400" />
+                  {{ t('settings.buildLegacyNotice') }}
+                </p>
+              </template>
               <UiSwitch
                 :id="`setting-channel-${channel}`"
                 :model-value="form.upstream_channels.includes(channel)"
@@ -793,6 +804,17 @@ async function saveConfig(): Promise<void> {
                 "
                 @update:model-value="toggleUpstreamChannel(channel, $event)"
               />
+            </SettingRow>
+            <SettingRow
+              v-if="form.upstream_channels.includes('build')"
+              :label="t('settings.buildNative')"
+              control-id="setting-build-native"
+              :description="t('settings.buildNativeHelp')"
+              effect="service"
+              :changed="changedFields.has('build_native_nonstream')"
+              :env="environmentKey('build_native_nonstream')"
+            >
+              <UiSwitch id="setting-build-native" v-model="form.build_native_nonstream" />
             </SettingRow>
             <SettingRow
               :label="t('settings.initTimeout')"

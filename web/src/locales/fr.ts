@@ -355,7 +355,7 @@ export const messages: Record<TranslationKey, string> = {
     'Le canal Build est désactivé en amont ; les requêtes refusées passent par le canal par défaut',
   'settings.channelRow': 'Canal {channel}',
   'settings.upstreamChannelsHelp':
-    'La génération utilise uniquement le canal Playground ; le canal Build a été supprimé car il crée des objets d’application dans le compte',
+    'Playground est le canal par défaut. Build est l’ancien canal, à génération désactivée en amont ; activé, les requêtes refusées passent par Playground',
   'settings.modelMapping': 'Correspondance des modèles',
   'settings.modelMappingHelp':
     'Les requêtes pour le nom de modèle de gauche utilisent le modèle de droite',

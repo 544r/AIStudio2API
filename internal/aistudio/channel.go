@@ -36,27 +36,19 @@ type channelCandidate struct {
 	channel Channel
 }
 
-// SetUpstreamChannels 设置生成请求按顺序启用的上游通道。
-// Build 通道已移除：写代码助手会在账号中创建应用对象，任何配置都只启用 Playground。
+// SetUpstreamChannels 设置生成请求按顺序启用的上游通道
 func (p *AccountPool) SetUpstreamChannels(channels []Channel) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.channels = []Channel{ChannelPlayground}
+	p.channels = append([]Channel(nil), channels...)
 	p.notifyLocked()
 }
 
-// SetModelChannels 设置模型限定使用的上游通道，键为模型 ID。
-// Build 通道已移除，限定 Build 的模型改为使用 Playground。
+// SetModelChannels 设置模型限定使用的上游通道，键为模型 ID
 func (p *AccountPool) SetModelChannels(channels map[string]Channel) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	playground := make(map[string]Channel, len(channels))
-	for modelID, channel := range channels {
-		if channel == ChannelPlayground {
-			playground[modelID] = channel
-		}
-	}
-	p.modelChannels = playground
+	p.modelChannels = maps.Clone(channels)
 	p.notifyLocked()
 }
 
@@ -160,19 +152,21 @@ func (l *AccountLease) CooldownScope(scope string) string {
 	return ChannelCooldownScope(l.Channel(), scope)
 }
 
-// channelEnabledLocked 只启用 Playground。Build 与 Assistant 通道已移除：
-// 它们会调用 CreateApplet 在账号中创建应用对象，是账号侧可见的自动化痕迹。
 func (p *AccountPool) channelEnabledLocked(channel Channel) bool {
-	return channel == ChannelPlayground
+	if channel == ChannelAssistant {
+		return true
+	}
+	if len(p.channels) == 0 {
+		return channel == ChannelPlayground
+	}
+	return slices.Contains(p.channels, channel)
 }
 
 func (p *AccountPool) enabledChannelsLocked() []Channel {
-	return []Channel{ChannelPlayground}
-}
-
-// IsRetiredBuildModel 判断模型 ID 是否属于已移除的 Build 写代码助手通道
-func IsRetiredBuildModel(modelID string) bool {
-	return strings.HasSuffix(strings.TrimPrefix(strings.TrimSpace(modelID), "models/"), assistantModelSuffix)
+	if len(p.channels) == 0 {
+		return []Channel{ChannelPlayground}
+	}
+	return p.channels
 }
 
 // generationChannelSelection 判断选择是否属于按通道调度的生成请求

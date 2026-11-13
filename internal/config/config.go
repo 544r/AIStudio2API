@@ -799,8 +799,7 @@ func ParseModelMapping(value string) ([]ModelAlias, error) {
 	return mapping, nil
 }
 
-// ParseModelChannels 解析逗号分隔的 模型 ID:通道，返回每个模型限定使用的通道。
-// Build 通道已移除，限定 build 的条目直接忽略，模型按 Playground 调度。
+// ParseModelChannels 解析逗号分隔的 模型 ID:通道，返回每个模型限定使用的通道
 func ParseModelChannels(value string) (map[string]string, error) {
 	channels := make(map[string]string)
 	for _, item := range strings.Split(value, ",") {
@@ -812,10 +811,7 @@ func ParseModelChannels(value string) (map[string]string, error) {
 		model := strings.TrimPrefix(strings.TrimSpace(item[:max(index, 0)]), "models/")
 		channel := strings.ToLower(strings.TrimSpace(item[index+1:]))
 		if index < 0 || model == "" || !slices.Contains(upstreamChannels, channel) {
-			return nil, fmt.Errorf("MODEL_CHANNELS 的每一项写成 模型 ID:playground，%q 不符合", item)
-		}
-		if channel == "build" {
-			continue
+			return nil, fmt.Errorf("MODEL_CHANNELS 的每一项写成 模型 ID:playground 或 模型 ID:build，%q 不符合", item)
 		}
 		if _, exists := channels[model]; exists {
 			return nil, fmt.Errorf("MODEL_CHANNELS 中模型 %s 重复", model)
@@ -825,29 +821,25 @@ func ParseModelChannels(value string) (map[string]string, error) {
 	return channels, nil
 }
 
-// parseUpstreamChannels 把逗号分隔的通道列表拆成去空白的小写名称。
-// Build 通道已移除：任何配置都归一为 playground，旧配置里的 build 静默丢弃。
+// parseUpstreamChannels 把逗号分隔的通道列表拆成去空白的小写名称
 func parseUpstreamChannels(value string) []string {
-	channels := make([]string, 0, 1)
+	var channels []string
 	for _, item := range strings.Split(value, ",") {
-		if item = strings.ToLower(strings.TrimSpace(item)); item == "playground" && len(channels) == 0 {
+		if item = strings.ToLower(strings.TrimSpace(item)); item != "" {
 			channels = append(channels, item)
 		}
-	}
-	if len(channels) == 0 {
-		channels = append(channels, "playground")
 	}
 	return channels
 }
 
-// validateUpstreamChannels 要求上游通道为 playground；Build 通道已移除
+// validateUpstreamChannels 要求至少一个已知且不重复的上游通道
 func validateUpstreamChannels(channels []string) error {
 	if len(channels) == 0 {
-		return fmt.Errorf("UPSTREAM_CHANNELS 只能包含 playground")
+		return fmt.Errorf("UPSTREAM_CHANNELS 至少包含 playground 或 build")
 	}
 	for index, channel := range channels {
-		if channel != "playground" {
-			return fmt.Errorf("UPSTREAM_CHANNELS 只能包含 playground（Build 通道已移除）")
+		if !slices.Contains(upstreamChannels, channel) {
+			return fmt.Errorf("UPSTREAM_CHANNELS 只能包含 playground 与 build")
 		}
 		if slices.Contains(channels[:index], channel) {
 			return fmt.Errorf("UPSTREAM_CHANNELS 通道 %s 重复", channel)

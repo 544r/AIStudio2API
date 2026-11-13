@@ -171,11 +171,10 @@ func subtractTextTokens(details []ModalityTokenCount, tokens int64) []ModalityTo
 	return result
 }
 
-// CountTokensForAccount 使用指定账户调用权威 token 计数。Build 通道已移除，
-// Build 租约的计数请求直接失败，不再经 ProxyUnaryCall 发送。
+// CountTokensForAccount 使用指定账户调用权威 token 计数，Build 租约经 Build 代理计数
 func (c *Client) CountTokensForAccount(ctx context.Context, accountID string, request TokenCountRequest) (TokenCount, error) {
 	if lease, ok := AccountLeaseFromContext(ctx); ok && lease.Channel() == ChannelBuild {
-		return TokenCount{}, fmt.Errorf("%w: Build 通道已移除", ErrInvalidArgument)
+		return c.buildCountTokens(ctx, accountID, request)
 	}
 	if entry, err := c.modelEntry(ctx, accountID, request.Model); err == nil && entry.model.Capabilities["assistant_route"] {
 		request.Model = assistantBaseModelID(request.Model)

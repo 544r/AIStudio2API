@@ -327,7 +327,7 @@ export const messages = {
   'settings.buildLegacyNotice': 'Build 通道已被上游停用，请求被拒后改经默认通道完成',
   'settings.channelRow': '{channel} 通道',
   'settings.upstreamChannelsHelp':
-    '仅使用 Playground 通道生成；Build 通道已移除（该通道会在账号中创建应用对象）',
+    'Playground 为默认通道；Build 为旧版通道，上游已停用其生成，开启后被拒请求改经默认通道完成',
   'settings.modelMapping': '模型映射',
   'settings.modelMappingHelp': '客户端请求左侧的模型名时，改用右侧的模型',
   'settings.modelChannels': '模型通道',
