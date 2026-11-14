@@ -144,17 +144,8 @@ func parseModelCatalog(source io.Reader) (modelCatalog, error) {
 		catalog.models = append(catalog.models, entry.model)
 		catalog.entries[entry.model.ID] = entry
 	}
-	for _, base := range catalog.models {
-		if !base.Capabilities["code_assistant"] {
-			continue
-		}
-		entry := assistantModelEntry(catalog.entries[base.ID])
-		if _, exists := catalog.entries[entry.model.ID]; exists {
-			continue
-		}
-		catalog.models = append(catalog.models, entry.model)
-		catalog.entries[entry.model.ID] = entry
-	}
+	// fork 只使用 Playground，不从目录派生 -build 写代码助手模型：没有这些条目，
+	// 模型列表、请求路由和管理端都不会出现 Build 入口，Google 侧也收不到 Build 请求。
 	return catalog, nil
 }
 

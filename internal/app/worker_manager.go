@@ -328,8 +328,9 @@ func (manager *accountWorkerManager) runtimeAvailable(accountIDs []string) ([]st
 // workerIdleTimeout 为超出热池目标的 Worker 空闲多久后关闭
 const workerIdleTimeout = 5 * time.Minute
 
-// warmIdleTimeout 为全部账户没有请求多久后进入闲置休眠：关闭常驻 Worker 并停止预热，直到下一个请求
-const warmIdleTimeout = 30 * time.Minute
+// warmIdleTimeout 为全部账户没有请求多久后进入闲置休眠：关闭常驻 Worker 并停止预热，直到下一个请求。
+// fork 把上游的 30 分钟放宽到 6 小时，避免个人 RP 隔一段时间发一条时频繁冷启动。
+const warmIdleTimeout = 6 * time.Hour
 
 // reapIdleWorkers 定期关闭超出热池目标且空闲超时的 Worker，按全部账户的请求活动进入或退出闲置休眠
 func (manager *accountWorkerManager) reapIdleWorkers() {

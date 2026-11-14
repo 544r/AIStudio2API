@@ -181,8 +181,10 @@ func (l *AccountLease) CooldownScope(scope string) string {
 }
 
 func (p *AccountPool) channelEnabledLocked(channel Channel) bool {
+	// fork 禁用 Build 写代码助手通道：即使上游代码仍编译在二进制里，
+	// 这里也永远不会选中 assistant 通道。
 	if channel == ChannelAssistant {
-		return true
+		return false
 	}
 	if len(p.channels) == 0 {
 		return channel == ChannelPlayground
@@ -358,9 +360,9 @@ func (p *AccountPool) AssistantModel(modelID string) bool {
 	return p.assistantModelLocked(modelID)
 }
 
-// assistantModelLocked 判断模型是否带 assistant_route 能力，调用方持有 p.mu
+// assistantModelLocked 在 fork 中始终返回 false：写代码助手已禁用，任何模型都不走 assistant 通道
 func (p *AccountPool) assistantModelLocked(modelID string) bool {
-	return p.modelCapabilityLocked(modelID, "assistant_route")
+	return false
 }
 
 // assistantBusyLocked 判断账户正在为 -build 选择运行另一个写代码助手生成，同一账户同时只运行一个
