@@ -18,19 +18,20 @@ import (
 
 // accountWorkerManager 管理每账户的长驻 WAA worker
 type accountWorkerManager struct {
-	mu             sync.RWMutex
-	fillMu         sync.Mutex
-	rebalanceMu    sync.Mutex
-	pool           *aistudio.AccountPool
-	accounts       map[string]*accountWorker
-	openings       map[string]chan struct{}
-	requests       *requestRegistry
-	refresher      *authRuntimeRefresher
-	proxyFailed    func(proxy string, accountID string, err error)
-	camoufox       string
-	globalProxy    string
-	initTimeout    time.Duration
-	warmTarget     atomic.Int64
+	mu          sync.RWMutex
+	fillMu      sync.Mutex
+	rebalanceMu sync.Mutex
+	pool        *aistudio.AccountPool
+	accounts    map[string]*accountWorker
+	openings    map[string]chan struct{}
+	requests    *requestRegistry
+	refresher   *authRuntimeRefresher
+	proxyFailed func(proxy string, accountID string, err error)
+	camoufox    string
+	globalProxy string
+	initTimeout time.Duration
+	warmTarget  atomic.Int64
+	// dormant 表示全部账户长期没有请求、常驻 Worker 已休眠并停止预热
 	dormant        atomic.Bool
 	maxActive      atomic.Int64
 	startup        startupLimiter
@@ -238,7 +239,7 @@ func (manager *accountWorkerManager) expandInBackground(accountID string, modelI
 			errors.Is(err, errAccountWorkerCapacity) || errors.Is(err, errAccountRuntimeBusy) {
 			return
 		}
-		manager.requests.log(accountID, "WARN", fmt.Sprintf("WAA Worker 后台扩容失败 | 错误=%v", err))
+		manager.requests.log(accountID, "WARN", "WAA Worker 后台扩容失败", "error", err)
 		var startup *accountWorkerInitError
 		if manager.proxyFailed != nil && errors.As(err, &startup) && proxyNetworkError(ctx, err) {
 			manager.proxyFailed(startup.proxy, accountID, err)
@@ -277,9 +278,7 @@ func (manager *accountWorkerManager) markRuntimeBusy(account *accountWorker, cau
 	label := account.label
 	account.mu.Unlock()
 	if first {
-		manager.requests.log(label, "WARN", fmt.Sprintf(
-			"WAA Worker 账户由其他进程占用 | 暂停调度=%s | 错误=%s", delay, strings.TrimSpace(cause.Error()),
-		))
+		manager.requests.log(label, "WARN", "WAA Worker 账户由其他进程占用", "paused", delay, "error", cause)
 	}
 	time.AfterFunc(delay, manager.notifyScheduling)
 	return busyErr
@@ -329,7 +328,7 @@ func (manager *accountWorkerManager) runtimeAvailable(accountIDs []string) ([]st
 const workerIdleTimeout = 5 * time.Minute
 
 // warmIdleTimeout 为全部账户没有请求多久后进入闲置休眠：关闭常驻 Worker 并停止预热，直到下一个请求。
-// fork 把上游的 30 分钟放宽到 6 小时，避免个人 RP 隔一段时间发一条时频繁冷启动。
+// fork 把上游原来的 30 分钟放宽到 6 小时，避免个人 RP 隔一段时间发一条时频繁冷启动。
 const warmIdleTimeout = 6 * time.Hour
 
 // reapIdleWorkers 定期关闭超出热池目标且空闲超时的 Worker，按全部账户的请求活动进入或退出闲置休眠
@@ -357,7 +356,7 @@ func (manager *accountWorkerManager) checkIdle(now time.Time, idleSince time.Tim
 		}
 	}
 	if now.Sub(idleSince) >= warmIdleTimeout && manager.dormant.CompareAndSwap(false, true) {
-		manager.requests.log("service", "INFO", fmt.Sprintf("WAA Worker 闲置休眠 | 闲置=%s", warmIdleTimeout))
+		manager.requests.log("service", "INFO", "WAA Worker 闲置休眠", "idle", warmIdleTimeout)
 	}
 	for manager.reapIdleWorker(now.Add(-workerIdleTimeout)) {
 	}
@@ -405,13 +404,11 @@ func (manager *accountWorkerManager) reapIdleWorker(before time.Time) bool {
 	evicted, err := manager.evictIdleWorker(manager.lifecycle, victim)
 	manager.releaseVictim(victim)
 	if err != nil {
-		manager.requests.log(victim, "WARN", fmt.Sprintf("WAA Worker 空闲回收失败 | 错误=%v", err))
+		manager.requests.log(victim, "WARN", "WAA Worker 空闲回收失败", "error", err)
 		return false
 	}
 	if evicted {
-		manager.requests.log("service", "INFO", fmt.Sprintf(
-			"WAA Worker 空闲回收 | Worker=%d/%d", len(manager.WarmAccountIDs()), manager.activeLimit(),
-		))
+		manager.requests.log("service", "INFO", "WAA Worker 空闲回收", "workers", fmt.Sprintf("%d/%d", len(manager.WarmAccountIDs()), manager.activeLimit()))
 	}
 	return evicted
 }
@@ -493,18 +490,12 @@ func (manager *accountWorkerManager) stopAccountWorker(account *accountWorker) e
 	} else if account.cleanupWorker != nil {
 		pid = account.cleanupWorker.State().PID
 	}
-	manager.requests.log(account.label, "INFO", fmt.Sprintf("WAA Worker 停止 | PID=%d", pid))
+	manager.requests.log(account.label, "INFO", "WAA Worker 停止", "pid", pid)
 	if err := manager.closeAccountWorker(account); err != nil {
-		manager.requests.log(account.label, "ERROR", fmt.Sprintf(
-			"WAA Worker 停止失败 | PID=%d | 耗时=%s | 错误=%s",
-			pid, time.Since(startedAt).Round(time.Millisecond), strings.TrimSpace(err.Error()),
-		))
+		manager.requests.log(account.label, "ERROR", "WAA Worker 停止失败", "pid", pid, "duration", time.Since(startedAt), "error", err)
 		return err
 	}
-	manager.requests.log(account.label, "INFO", fmt.Sprintf(
-		"WAA Worker 已停止 | PID=%d | 耗时=%s",
-		pid, time.Since(startedAt).Round(time.Millisecond),
-	))
+	manager.requests.log(account.label, "INFO", "WAA Worker 已停止", "pid", pid, "duration", time.Since(startedAt))
 	return nil
 }
 
@@ -971,15 +962,13 @@ func (manager *accountWorkerManager) reloadWorker(ctx context.Context, accountID
 	err := worker.Reload(reloadCtx)
 	cancel()
 	if err != nil {
-		manager.requests.log(label, "WARN", fmt.Sprintf(
-			"WAA Worker 重新载入页面失败 | 耗时=%s | 错误=%s", time.Since(startedAt).Round(time.Millisecond), strings.TrimSpace(err.Error()),
-		))
+		manager.requests.log(label, "WARN", "WAA Worker 重新载入页面失败", "duration", time.Since(startedAt), "error", err)
 		return err
 	}
 	if err := manager.rememberPageHeaders(accountID, worker); err != nil {
 		return err
 	}
-	manager.requests.log(label, "INFO", fmt.Sprintf("WAA Worker 页面已重新载入 | 耗时=%s", time.Since(startedAt).Round(time.Millisecond)))
+	manager.requests.log(label, "INFO", "WAA Worker 页面已重新载入", "duration", time.Since(startedAt))
 	return nil
 }
 
@@ -1000,9 +989,8 @@ func (manager *accountWorkerManager) loadTemporaryPage(ctx context.Context, acco
 	if err := closePendingWorker(preparer); err != nil {
 		return camoufoxnative.PageCatalog{}, err
 	}
-	manager.requests.log(preparer.account.label, "INFO", fmt.Sprintf(
-		"WAA Worker 临时页面已关闭 | 页面模型=%s | 耗时=%s", bootstrapModel, time.Since(preparer.startedAt).Round(time.Millisecond),
-	))
+	manager.requests.logStage(preparer.account.label, "INFO", api.LogStage{Name: "WAA Worker 启动", State: "completed"}, "WAA Worker 临时页面已关闭",
+		"page_model", bootstrapModel, "duration", time.Since(preparer.startedAt))
 	return catalog, nil
 }
 
@@ -1130,10 +1118,7 @@ func (manager *accountWorkerManager) startReservedWorker(
 		}
 		if err != nil {
 			account.startupMu.Unlock()
-			manager.requests.log(label, "ERROR", fmt.Sprintf(
-				"WAA Worker 启动失败 | 耗时=%s | 错误=%s",
-				time.Since(startedAt).Round(time.Millisecond), strings.TrimSpace(err.Error()),
-			))
+			manager.requests.logStage(label, "ERROR", api.LogStage{Name: "WAA Worker 启动", State: "failed"}, "WAA Worker 启动失败", "duration", time.Since(startedAt), "error", err)
 			return nil, &accountWorkerInitError{err: err}
 		}
 		ownsLease = true
@@ -1155,14 +1140,14 @@ func (manager *accountWorkerManager) startReservedWorker(
 		return nil, err
 	}
 	reload, _ := ctx.Value(workerReloadKey{}).(bool)
-	logStep := func(step int, message string) {
+	logStep := func(step int, message string, attrs ...any) {
 		if reload {
-			manager.requests.log(label, "INFO", "WAA Worker 启动 | 重新载入 | "+message)
+			manager.requests.logStage(label, "INFO", api.LogStage{Name: "WAA Worker 启动"}, fmt.Sprintf("重新载入：%s", message), attrs...)
 			return
 		}
-		manager.requests.log(label, "INFO", fmt.Sprintf("WAA Worker 启动 | %d/7 | %s", step, message))
+		manager.requests.logStage(label, "INFO", api.LogStage{Name: "WAA Worker 启动", Step: step, Steps: 7}, message, attrs...)
 	}
-	logStep(1, "初始化页面 | 页面模型="+bootstrapModel)
+	logStep(1, "初始化页面", "page_model", bootstrapModel)
 	initCtx, cancel := context.WithTimeout(ctx, manager.initTimeout)
 	options.Model = bootstrapModel
 	options.StartupProgress = func(stage camoufoxnative.StartupStage) {
@@ -1182,20 +1167,16 @@ func (manager *accountWorkerManager) startReservedWorker(
 		}
 		account.startupMu.Unlock()
 		if err := ctx.Err(); err != nil {
-			manager.requests.log(label, "WARN", fmt.Sprintf(
-				"WAA Worker 启动已取消 | 页面模型=%s | 耗时=%s",
-				bootstrapModel, time.Since(startedAt).Round(time.Millisecond),
-			))
+			manager.requests.logStage(label, "WARN", api.LogStage{Name: "WAA Worker 启动", State: "cancelled"}, "WAA Worker 启动已取消",
+				"page_model", bootstrapModel, "duration", time.Since(startedAt))
 			return nil, err
 		}
 		if manager.refresher != nil && !reload && aistudio.DefinitiveAuthenticationFailure(initErr) {
-			manager.requests.log(label, "INFO", "WAA Worker 启动 | 登录态失效，账户认证续签 | 错误="+strings.TrimSpace(initErr.Error()))
+			manager.requests.logStage(label, "INFO", api.LogStage{Name: "WAA Worker 启动"}, "登录态失效，账户认证续签", "error", initErr)
 			return nil, &accountWorkerInitError{err: initErr, proxy: options.Proxy}
 		}
-		manager.requests.log(label, "ERROR", fmt.Sprintf(
-			"WAA Worker 启动失败 | 页面模型=%s | 耗时=%s | 错误=%s",
-			bootstrapModel, time.Since(startedAt).Round(time.Millisecond), strings.TrimSpace(initErr.Error()),
-		))
+		manager.requests.logStage(label, "ERROR", api.LogStage{Name: "WAA Worker 启动", State: "failed"}, "WAA Worker 启动失败",
+			"page_model", bootstrapModel, "duration", time.Since(startedAt), "error", initErr)
 		return nil, &accountWorkerInitError{err: initErr, proxy: options.Proxy}
 	}
 	return &accountWorkerPreparer{
@@ -1225,9 +1206,7 @@ func activateAccountWorker(preparer *accountWorkerPreparer) error {
 			label := preparer.account.label
 			preparer.account.mu.Unlock()
 			cleanupErr := discardAccountWorker(preparer)
-			preparer.manager.requests.log(label, "ERROR", fmt.Sprintf(
-				"WAA Worker 旧实例停止失败 | 错误=%s", strings.TrimSpace(closeErr.Error()),
-			))
+			preparer.manager.requests.log(label, "ERROR", "WAA Worker 旧实例停止失败", "error", closeErr)
 			return errors.Join(closeErr, cleanupErr)
 		}
 	}
@@ -1244,10 +1223,8 @@ func activateAccountWorker(preparer *accountWorkerPreparer) error {
 	label := preparer.account.label
 	preparer.account.mu.Unlock()
 	preparer.manager.notifyScheduling()
-	preparer.manager.requests.log(label, "INFO", fmt.Sprintf(
-		"WAA Worker 就绪 | 页面模型=%s | PID=%d | 耗时=%s",
-		preparer.bootstrapModel, preparer.worker.State().PID, time.Since(preparer.startedAt).Round(time.Millisecond),
-	))
+	preparer.manager.requests.logStage(label, "INFO", api.LogStage{Name: "WAA Worker 启动", State: "completed"}, "WAA Worker 就绪",
+		"page_model", preparer.bootstrapModel, "pid", preparer.worker.State().PID, "duration", time.Since(preparer.startedAt))
 	preparer.pending = false
 	preparer.account.startupMu.Unlock()
 	return nil
@@ -1262,10 +1239,8 @@ func discardAccountWorker(preparer *accountWorkerPreparer) error {
 	preparer.account.mu.Lock()
 	label := preparer.account.label
 	preparer.account.mu.Unlock()
-	preparer.manager.requests.log(label, "WARN", fmt.Sprintf(
-		"WAA Worker 启动已取消 | 页面模型=%s | 耗时=%s",
-		preparer.bootstrapModel, time.Since(preparer.startedAt).Round(time.Millisecond),
-	))
+	preparer.manager.requests.logStage(label, "WARN", api.LogStage{Name: "WAA Worker 启动", State: "cancelled"}, "WAA Worker 启动已取消",
+		"page_model", preparer.bootstrapModel, "duration", time.Since(preparer.startedAt))
 	return cleanupErr
 }
 
@@ -1541,9 +1516,9 @@ func (manager *accountWorkerManager) openWorker(
 	switch {
 	case warmCount <= manager.warmLimit():
 	case replacing:
-		manager.requests.log("service", "INFO", fmt.Sprintf("WAA Worker 按需替换 | Worker=%d/%d", warmCount, manager.activeLimit()))
+		manager.requests.log("service", "INFO", "WAA Worker 按需替换", "workers", fmt.Sprintf("%d/%d", warmCount, manager.activeLimit()))
 	default:
-		manager.requests.log("service", "INFO", fmt.Sprintf("WAA Worker 按需扩容 | Worker=%d/%d", warmCount, manager.activeLimit()))
+		manager.requests.log("service", "INFO", "WAA Worker 按需扩容", "workers", fmt.Sprintf("%d/%d", warmCount, manager.activeLimit()))
 	}
 	return preparer, nil
 }
@@ -1599,7 +1574,7 @@ func (manager *accountWorkerManager) detachStartup(
 			stop()
 			cancel()
 			if err := release(); err != nil {
-				manager.requests.log(lease.Account().Config.Label, "WARN", "账户租约释放失败 | 错误="+err.Error())
+				manager.requests.log(lease.Account().Config.Label, "WARN", "账户租约释放失败", "error", err)
 			}
 		}()
 		preparer, err := start(startupCtx)
@@ -1663,7 +1638,7 @@ func (manager *accountWorkerManager) startAuthenticatedWorker(ctx context.Contex
 			err = manager.refresher.markAuthenticationRequired(ctx, err)
 		} else {
 			err = recoverErr
-			manager.requests.log(lease.Account().Config.Label, "ERROR", "WAA Worker 启动失败 | 错误="+strings.TrimSpace(err.Error()))
+			manager.requests.logStage(lease.Account().Config.Label, "ERROR", api.LogStage{Name: "WAA Worker 启动", State: "failed"}, "WAA Worker 启动失败", "error", err)
 		}
 	} else if ctx.Err() == nil {
 		err = errors.Join(err, lease.ConfirmAuthenticationFailure(ctx, err))
@@ -1766,10 +1741,8 @@ func (manager *accountWorkerManager) fillWarm(ctx context.Context, first chan<- 
 		limit := manager.warmLimit()
 		if len(warm) >= limit {
 			if launched > 0 {
-				manager.requests.log("service", "INFO", fmt.Sprintf(
-					"WAA Worker 预热完成 | Worker=%d/%d | 耗时=%s",
-					len(warm), manager.PrewarmTarget(), time.Since(startedAt).Round(time.Millisecond),
-				))
+				manager.requests.log("service", "INFO", "WAA Worker 预热完成",
+					"workers", fmt.Sprintf("%d/%d", len(warm), manager.PrewarmTarget()), "duration", time.Since(startedAt))
 			}
 			notify(nil)
 			return
@@ -1831,19 +1804,15 @@ func (manager *accountWorkerManager) fillWarm(ctx context.Context, first chan<- 
 		warm = manager.WarmAccountIDs()
 		if len(warm) > 0 {
 			if launched > 0 {
-				manager.requests.log("service", "INFO", fmt.Sprintf(
-					"WAA Worker 预热完成 | Worker=%d/%d | 失败=%d | 耗时=%s",
-					len(warm), manager.PrewarmTarget(), len(failedAccounts), time.Since(startedAt).Round(time.Millisecond),
-				))
+				manager.requests.log("service", "INFO", "WAA Worker 预热完成",
+					"workers", fmt.Sprintf("%d/%d", len(warm), manager.PrewarmTarget()), "failed", len(failedAccounts), "duration", time.Since(startedAt))
 			}
 			notify(nil)
 			return
 		}
 		if err == nil && runtimeBusyErr == nil && !groups.EarliestCooldown.Until.IsZero() {
 			if !notified {
-				manager.requests.log("service", "INFO", fmt.Sprintf(
-					"WAA Worker 预热等待账户冷却 | 恢复=%s", groups.EarliestCooldown.Until.Local().Format(time.RFC3339),
-				))
+				manager.requests.log("service", "INFO", "WAA Worker 预热等待账户冷却", "until", groups.EarliestCooldown.Until.Local().Format(time.RFC3339))
 			}
 			notify(nil)
 			if err := waitScheduling(ctx, nil, min(time.Until(groups.EarliestCooldown.Until), schedulingRecheck)); err != nil {
