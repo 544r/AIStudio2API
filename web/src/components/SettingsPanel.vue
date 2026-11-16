@@ -77,6 +77,7 @@ const sections: {
       'warm_startup_concurrency',
       'per_account_concurrency',
       'routing_strategy',
+      'routing_switch_turns',
       'account_order',
       'max_account_switches',
     ],
@@ -754,10 +755,33 @@ async function saveConfig(): Promise<void> {
               <UiSelect id="setting-routing" v-model="form.routing_strategy" :class="inputClass">
                 <option value="round-robin">{{ t('settings.routingRoundRobin') }}</option>
                 <option value="fill-first">{{ t('settings.routingFillFirst') }}</option>
+                <option value="switch-after">{{ t('settings.routingSwitchAfter') }}</option>
               </UiSelect>
             </SettingRow>
             <SettingRow
-              v-if="form.routing_strategy === 'fill-first' && accounts.length > 1"
+              v-if="form.routing_strategy === 'switch-after'"
+              :label="t('settings.routingSwitchTurns')"
+              control-id="setting-routing-switch-turns"
+              :description="t('settings.routingSwitchTurnsHelp')"
+              effect="immediate"
+              :changed="changedFields.has('routing_switch_turns')"
+              :env="environmentKey('routing_switch_turns')"
+            >
+              <input
+                id="setting-routing-switch-turns"
+                v-model.number="form.routing_switch_turns"
+                :class="[inputClass, 'disabled:opacity-50']"
+                type="number"
+                min="1"
+                :disabled="environmentKey('routing_switch_turns') !== undefined"
+              />
+            </SettingRow>
+            <SettingRow
+              v-if="
+                (form.routing_strategy === 'fill-first' ||
+                  form.routing_strategy === 'switch-after') &&
+                accounts.length > 1
+              "
               :label="t('settings.accountOrder')"
               group-id="setting-account-order"
               :description="t('settings.accountOrderHelp')"

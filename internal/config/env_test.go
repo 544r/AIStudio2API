@@ -45,6 +45,24 @@ func TestSaveWritesOnlyChangedKeys(t *testing.T) {
 	}
 }
 
+// TestSwitchAfterConfig 核对每 N 条换号策略与间隔写入并读回 .env
+func TestSwitchAfterConfig(t *testing.T) {
+	path := writeTestEnv(t, "")
+	cfg := Default()
+	cfg.RoutingStrategy = "switch-after"
+	cfg.RoutingSwitchTurns = 25
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.RoutingStrategy != "switch-after" || loaded.RoutingSwitchTurns != 25 {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+}
+
 // TestLoadInvalidValueUsesDefault 核对取值无效的项按默认值加载并记录键与原值
 func TestLoadInvalidValueUsesDefault(t *testing.T) {
 	path := writeTestEnv(t, "ROUTING_STRATEGY=fill-first\nMEDIA_OUTPUT=file\nPER_ACCOUNT_CONCURRENCY=abc\nWARM_WORKER_LIMIT=30\n")

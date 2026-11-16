@@ -304,6 +304,8 @@
   "REQUEST_TIMEOUT 必须是正数时长": "REQUEST_TIMEOUT muss eine positive Dauer sein",
   "REQUEST_TIMEOUT 无效: %w": "REQUEST_TIMEOUT ist ungültig: {0}",
   "ROUTING_STRATEGY 必须是 round-robin 或 fill-first": "ROUTING_STRATEGY muss round-robin oder fill-first sein",
+  "ROUTING_STRATEGY 必须是 round-robin、fill-first 或 switch-after": "ROUTING_STRATEGY muss round-robin, fill-first oder switch-after sein",
+  "ROUTING_SWITCH_TURNS 必须是正整数": "ROUTING_SWITCH_TURNS muss eine positive ganze Zahl sein",
   "SOCKS 版本 %d 不受支持": "SOCKS-Version {0} wird nicht unterstützt",
   "SOCKS5 代理 URL 缺少端口": "SOCKS5-Proxy-URL enthält keinen Port",
   "SOCKS5 命令 %d 不受支持": "SOCKS5-Befehl {0} wird nicht unterstützt",

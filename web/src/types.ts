@@ -422,7 +422,8 @@ export interface ServiceConfig {
   warm_startup_concurrency: number
   per_account_concurrency: number
   max_account_switches: number
-  routing_strategy: 'round-robin' | 'fill-first'
+  routing_strategy: 'round-robin' | 'fill-first' | 'switch-after'
+  routing_switch_turns: number
   account_order: string
   upstream_channels: UpstreamChannel[]
   model_mapping: string

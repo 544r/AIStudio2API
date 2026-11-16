@@ -325,6 +325,7 @@ type RuntimeConfig struct {
 	WarmStartupConcurrency    int                  `json:"warm_startup_concurrency"`
 	PerAccountConcurrency     int                  `json:"per_account_concurrency"`
 	RoutingStrategy           string               `json:"routing_strategy"`
+	RoutingSwitchTurns        int                  `json:"routing_switch_turns"`
 	AccountOrder              string               `json:"account_order"`
 	MaxAccountSwitches        int                  `json:"max_account_switches"`
 	UpstreamChannels          []string             `json:"upstream_channels"`

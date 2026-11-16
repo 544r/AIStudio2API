@@ -1145,13 +1145,17 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 	if err != nil {
 		return api.RuntimeConfig{}, invalidConfigError(fmt.Errorf("REQUEST_TIMEOUT 无效: %w", err))
 	}
+	routingSwitchTurns := value.RoutingSwitchTurns
+	if routingSwitchTurns <= 0 {
+		routingSwitchTurns = config.Default().RoutingSwitchTurns
+	}
 	cfg := config.Config{
 		AutoStart:      value.AutoStart,
 		HideDockIcon:   value.HideDockIcon,
 		RequestBodyLog: value.RequestBodyLog,
 		LogFile:        value.LogFile, LogMaxTotalMB: value.LogMaxTotalMB,
 		AdminAuthEnabled: value.AdminAuthEnabled, AdminUsername: strings.TrimSpace(value.AdminUsername), AdminPassword: password,
-		AccountPushToken: pushToken,
+		AccountPushToken:     pushToken,
 		BuildNativeNonstream: value.BuildNativeNonstream,
 		NonstreamKeepalive:   value.NonstreamKeepalive, FakeStream: value.FakeStream, YouTubeLinks: value.YouTubeLinks,
 		SearchModelAliases: value.SearchModelAliases, DiscoverHiddenModels: value.DiscoverHiddenModels, GoogleSearch: value.GoogleSearch, StripThoughtSignatures: value.StripThoughtSignatures,
@@ -1162,6 +1166,7 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 		WarmStartupConcurrency: value.WarmStartupConcurrency,
 		PerAccountConcurrency:  value.PerAccountConcurrency,
 		RoutingStrategy:        value.RoutingStrategy,
+		RoutingSwitchTurns:     routingSwitchTurns,
 		AccountOrder:           strings.TrimSpace(value.AccountOrder),
 		MaxAccountSwitches:     value.MaxAccountSwitches,
 		UpstreamChannels:       value.UpstreamChannels,
@@ -1180,6 +1185,7 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 		return api.RuntimeConfig{}, err
 	}
 	admin.pool.SetRoutingStrategy(cfg.RoutingStrategy)
+	admin.pool.SetRoutingSwitchTurns(cfg.RoutingSwitchTurns)
 	admin.pool.SetAccountOrder(accountOrder(cfg.AccountOrder))
 	admin.pool.SetModelChannels(modelChannels(cfg.ModelChannels))
 	admin.pool.SetModelAccounts(modelAccounts(cfg.ModelAccounts))
@@ -1467,7 +1473,7 @@ func runtimeConfigDTO(cfg config.Config) api.RuntimeConfig {
 		LogFile:        cfg.LogFile, LogMaxTotalMB: cfg.LogMaxTotalMB,
 		AdminAuthEnabled: cfg.AdminAuthEnabled, AdminUsername: cfg.AdminUsername,
 		AdminPasswordSet: cfg.AdminPassword != "", SavedAdminPassword: cfg.AdminPassword,
-		AccountPushToken: &pushToken,
+		AccountPushToken:     &pushToken,
 		BuildNativeNonstream: cfg.BuildNativeNonstream,
 		NonstreamKeepalive:   cfg.NonstreamKeepalive, FakeStream: cfg.FakeStream, YouTubeLinks: cfg.YouTubeLinks,
 		SearchModelAliases: cfg.SearchModelAliases, DiscoverHiddenModels: cfg.DiscoverHiddenModels, GoogleSearch: cfg.GoogleSearch, StripThoughtSignatures: cfg.StripThoughtSignatures,
@@ -1480,6 +1486,7 @@ func runtimeConfigDTO(cfg config.Config) api.RuntimeConfig {
 		WarmStartupConcurrency: cfg.WarmStartupConcurrency,
 		PerAccountConcurrency:  cfg.PerAccountConcurrency,
 		RoutingStrategy:        cfg.RoutingStrategy,
+		RoutingSwitchTurns:     cfg.RoutingSwitchTurns,
 		AccountOrder:           cfg.AccountOrder,
 		MaxAccountSwitches:     cfg.MaxAccountSwitches,
 		UpstreamChannels:       cfg.UpstreamChannels,

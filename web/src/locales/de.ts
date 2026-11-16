@@ -448,12 +448,16 @@ export const messages: Record<TranslationKey, string> = {
   'settings.routingRoundRobin': 'Reihum',
   'settings.accountOrder': 'Kontoreihenfolge',
   'settings.accountOrderHelp':
-    'Beim Bevorzugen desselben Kontos werden diese Konten der Reihe nach verwendet; ist ein Konto ausgelastet, in der Abklingzeit oder nicht verfügbar, folgt das nächste',
+    'Beim Bevorzugen desselben Kontos und beim Wechsel alle N Antworten werden diese Konten der Reihe nach verwendet; ist ein Konto ausgelastet, in der Abklingzeit oder nicht verfügbar, folgt das nächste',
   'settings.accountOrderUp': '{account} nach oben',
   'settings.accountOrderDown': '{account} nach unten',
   'settings.routingFillFirst': 'Gleiches Konto bevorzugen',
+  'settings.routingSwitchAfter': 'Alle N Antworten wechseln',
   'settings.routingHelp':
-    'Reihum wechselt die Konten. „Gleiches Konto bevorzugen“ bleibt bei einem Konto, bis es ausgelastet oder nicht verfügbar ist.',
+    'Reihum wechselt die Konten. „Gleiches Konto bevorzugen“ bleibt bei einem Konto, bis es ausgelastet oder nicht verfügbar ist. „Alle N Antworten wechseln“ bleibt für N erfolgreiche Antworten bei einem Konto und wechselt dann zum nächsten.',
+  'settings.routingSwitchTurns': 'Antworten pro Konto',
+  'settings.routingSwitchTurnsHelp':
+    'Nach N erfolgreichen Antworten mit demselben Modell wird zum nächsten Konto in der Kontoreihenfolge gewechselt; danach wiederholt sich das alle N Antworten. Fehlgeschlagene Wiederholungen zählen nicht.',
   'settings.waaBackend': 'WAA-Backend',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',

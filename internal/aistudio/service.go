@@ -885,6 +885,7 @@ func forwardEventsWithLease(
 		}
 		if event.Kind == EventFinish {
 			terminal = true
+			pool.RecordRoutingTurn(accountID, modelID)
 			if err := lease.MarkAuthenticationValid(); err != nil {
 				slog.Error("账户认证状态保存失败", "account", accountID, "error", err)
 			}

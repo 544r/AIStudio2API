@@ -451,12 +451,16 @@ export const messages: Record<TranslationKey, string> = {
   'settings.routingRoundRobin': 'Tourniquet',
   'settings.accountOrder': 'Ordre des comptes',
   'settings.accountOrderHelp':
-    'Avec « Même compte en priorité », ces comptes sont utilisés dans cet ordre ; le compte suivant prend le relais lorsqu’un compte est saturé, en temporisation ou indisponible',
+    'Avec « Même compte en priorité » et « Changer tous les N tours », ces comptes sont utilisés dans cet ordre ; le compte suivant prend le relais lorsqu’un compte est saturé, en temporisation ou indisponible',
   'settings.accountOrderUp': 'Monter {account}',
   'settings.accountOrderDown': 'Descendre {account}',
   'settings.routingFillFirst': 'Même compte en priorité',
+  'settings.routingSwitchAfter': 'Changer tous les N tours',
   'settings.routingHelp':
-    'Le tourniquet alterne les comptes. « Même compte en priorité » garde un compte jusqu’à ce qu’il soit saturé ou indisponible.',
+    'Le tourniquet alterne les comptes. « Même compte en priorité » garde un compte jusqu’à ce qu’il soit saturé ou indisponible. « Changer tous les N tours » garde un compte pendant N réponses réussies, puis passe au suivant.',
+  'settings.routingSwitchTurns': 'Tours par compte',
+  'settings.routingSwitchTurnsHelp':
+    'Après N réponses réussies sur le même modèle, passe au compte suivant dans l’ordre des comptes, puis répète. Les nouvelles tentatives après échec ne sont pas comptées.',
   'settings.waaBackend': 'Moteur WAA',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',

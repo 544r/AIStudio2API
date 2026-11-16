@@ -446,12 +446,16 @@ export const messages: Record<TranslationKey, string> = {
   'settings.routingRoundRobin': '라운드 로빈',
   'settings.accountOrder': '계정 순서',
   'settings.accountOrderHelp':
-    '같은 계정 우선일 때 이 순서대로 사용하며, 한도에 도달했거나 쿨다운 중이거나 사용할 수 없으면 다음 계정으로 전환합니다',
+    '같은 계정 우선 또는 N개마다 전환일 때 이 순서대로 사용하며, 한도에 도달했거나 쿨다운 중이거나 사용할 수 없으면 다음 계정으로 전환합니다',
   'settings.accountOrderUp': '{account} 위로 이동',
   'settings.accountOrderDown': '{account} 아래로 이동',
   'settings.routingFillFirst': '같은 계정 우선',
+  'settings.routingSwitchAfter': 'N개마다 전환',
   'settings.routingHelp':
-    '라운드 로빈은 계정을 차례로 쓰고, 같은 계정 우선은 한도에 닿거나 쓸 수 없을 때까지 한 계정을 씁니다',
+    '라운드 로빈은 계정을 차례로 쓰고, 같은 계정 우선은 한도에 닿거나 쓸 수 없을 때까지 한 계정을 씁니다. N개마다 전환은 같은 계정에서 N개를 성공적으로 생성한 뒤 다음 계정으로 옮깁니다.',
+  'settings.routingSwitchTurns': '전환 간격(개)',
+  'settings.routingSwitchTurnsHelp':
+    '같은 모델에서 N개를 성공적으로 생성하면 계정 순서의 다음 계정으로 전환하고, 이후에도 N개마다 반복합니다. 실패 후 재시도는 세지 않습니다.',
   'settings.waaBackend': 'WAA 백엔드',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',

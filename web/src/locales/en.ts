@@ -445,12 +445,16 @@ export const messages: Record<TranslationKey, string> = {
   'settings.routingRoundRobin': 'Round robin',
   'settings.accountOrder': 'Account order',
   'settings.accountOrderHelp':
-    'Fill first uses these accounts in order and moves to the next one when an account is full, cooling down, or unavailable',
+    'Fill first and switch every N turns use these accounts in order, moving to the next when an account is full, cooling down, or unavailable',
   'settings.accountOrderUp': 'Move {account} up',
   'settings.accountOrderDown': 'Move {account} down',
   'settings.routingFillFirst': 'Fill first',
+  'settings.routingSwitchAfter': 'Switch every N turns',
   'settings.routingHelp':
-    'Round robin rotates accounts. Fill first stays on one account until it is full or unavailable.',
+    'Round robin rotates accounts. Fill first stays on one account until it is full or unavailable. Switch every N turns keeps one account for N successful replies, then moves to the next.',
+  'settings.routingSwitchTurns': 'Turns per account',
+  'settings.routingSwitchTurnsHelp':
+    'After N successful replies on the same model, move to the next account in the account order, then repeat. Failed retries do not count.',
   'settings.waaBackend': 'WAA backend',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',

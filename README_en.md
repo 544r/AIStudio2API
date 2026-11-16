@@ -645,8 +645,9 @@ Process environment variables override the same keys in `.env`, and those settin
 | `MAX_ACTIVE_WORKERS` | `20`, `10` with Camoufox | Maximum workers active during peak load |
 | `WARM_STARTUP_CONCURRENCY` | `5` | Camoufox workers cold-started concurrently during on-demand scaling; prewarming starts workers one at a time; unlimited with `WAA_BACKEND=spidermonkey` |
 | `PER_ACCOUNT_CONCURRENCY` | `2` | Concurrent requests allowed per account |
-| `ROUTING_STRATEGY` | `round-robin` | `round-robin` rotates accounts; `fill-first` reuses the first available account |
-| `ACCOUNT_ORDER` | empty | Accounts `fill-first` uses in order, comma-separated; unlisted accounts follow in ID order. Also adjustable on the Settings page, applied on save |
+| `ROUTING_STRATEGY` | `round-robin` | `round-robin` rotates accounts; `fill-first` reuses the first available account; `switch-after` moves to the next account after N successful replies on the same model |
+| `ROUTING_SWITCH_TURNS` | `10` | Switch interval for `switch-after`: how many successful replies on the same model to serve before moving to the next account in the account order; failed retries do not count |
+| `ACCOUNT_ORDER` | empty | Accounts `fill-first` and `switch-after` use in order, comma-separated; unlisted accounts follow in ID order. Also adjustable on the Settings page, applied on save |
 | `MAX_ACCOUNT_SWITCHES` | `3` | How many times a request moves to another account after a non-quota upstream error such as 403 or 5xx; `0` disables switching. Quota errors do not count, and the remaining accounts are still tried in turn |
 | `UPSTREAM_CHANNELS` | `playground` | Upstream channels for generation requests, `playground` and `build` comma separated; `build` is the legacy channel whose generation upstream has disabled |
 | `MODEL_MAPPING` | empty | Client model names mapped to catalog models, each item `alias:model ID`, comma separated |

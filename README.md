@@ -646,8 +646,9 @@ cp .env.example .env
 | `MAX_ACTIVE_WORKERS` | `20`，Camoufox 后端 `10` | 高峰期最多同时运行的 Worker 数 |
 | `WARM_STARTUP_CONCURRENCY` | `5` | 按需扩容时同时冷启动的 Camoufox Worker 数，预热逐个启动；`WAA_BACKEND=spidermonkey` 时不限制 |
 | `PER_ACCOUNT_CONCURRENCY` | `2` | 单账号同时执行的请求数 |
-| `ROUTING_STRATEGY` | `round-robin` | `round-robin` 轮询；`fill-first` 账号粘性优先 |
-| `ACCOUNT_ORDER` | 空 | `fill-first` 依次使用的账户，逗号分隔，未列出的账户排在后面并按 ID 排序；也可在设置页调整，保存后立即生效 |
+| `ROUTING_STRATEGY` | `round-robin` | `round-robin` 轮询；`fill-first` 账号粘性优先；`switch-after` 同一模型每 N 条成功后换下一个账户 |
+| `ROUTING_SWITCH_TURNS` | `10` | `switch-after` 的换号间隔：同一模型成功生成多少条后换到账户顺序中的下一个账户，失败重试不计数 |
+| `ACCOUNT_ORDER` | 空 | `fill-first` 与 `switch-after` 依次使用的账户，逗号分隔，未列出的账户排在后面并按 ID 排序；也可在设置页调整，保存后立即生效 |
 | `MAX_ACCOUNT_SWITCHES` | `3` | 上游返回 403、5xx 等非额度错误时一个请求最多换几次账户重试，`0` 为不换号；额度用尽不计入，照常依次尝试其余账户 |
 | `UPSTREAM_CHANNELS` | `playground` | 生成请求使用的上游通道，`playground`、`build` 逗号分隔；`build` 为旧通道，上游已停用其生成 |
 | `MODEL_MAPPING` | 空 | 客户端模型名到目录模型的映射，每项写成 `别名:模型 ID`，逗号分隔多项 |

@@ -42,6 +42,7 @@ var configKeys = [...]string{
 	"WARM_STARTUP_CONCURRENCY",
 	"PER_ACCOUNT_CONCURRENCY",
 	"ROUTING_STRATEGY",
+	"ROUTING_SWITCH_TURNS",
 	"ACCOUNT_ORDER",
 	"MAX_ACCOUNT_SWITCHES",
 	"UPSTREAM_CHANNELS",
@@ -146,15 +147,17 @@ type Config struct {
 	WarmStartupConcurrency int
 	PerAccountConcurrency  int
 	RoutingStrategy        string
-	AccountOrder           string
-	MaxAccountSwitches     int
-	UpstreamChannels       []string
-	ModelMapping           string
-	ModelChannels          string
-	ModelAccounts          string
-	WAABackend             string
-	MediaOutput            string
-	MediaBaseURL           string
+	// RoutingSwitchTurns 是 switch-after 策略下同一模型成功生成多少条后换下一个账户
+	RoutingSwitchTurns int
+	AccountOrder       string
+	MaxAccountSwitches int
+	UpstreamChannels   []string
+	ModelMapping       string
+	ModelChannels      string
+	ModelAccounts      string
+	WAABackend         string
+	MediaOutput        string
+	MediaBaseURL       string
 	// Invalid 是加载时取值无效、改用默认值的配置项
 	Invalid []InvalidValue
 	// Environment 是取自进程环境变量、覆盖 .env 的配置键
@@ -196,6 +199,7 @@ func Default() Config {
 		WarmStartupConcurrency: defaultWarmConcurrency,
 		PerAccountConcurrency:  defaultAccountConcurrency,
 		RoutingStrategy:        "round-robin",
+		RoutingSwitchTurns:     10,
 		MaxAccountSwitches:     DefaultMaxAccountSwitches,
 		UpstreamChannels:       []string{"playground"},
 		WAABackend:             WAABackendSpiderMonkey,
@@ -242,6 +246,7 @@ var configSetters = map[string]func(*Config, string) error{
 	"MAX_ACTIVE_WORKERS":       intSetter("MAX_ACTIVE_WORKERS", func(c *Config) *int { return &c.MaxActiveWorkers }),
 	"WARM_STARTUP_CONCURRENCY": intSetter("WARM_STARTUP_CONCURRENCY", func(c *Config) *int { return &c.WarmStartupConcurrency }),
 	"PER_ACCOUNT_CONCURRENCY":  intSetter("PER_ACCOUNT_CONCURRENCY", func(c *Config) *int { return &c.PerAccountConcurrency }),
+	"ROUTING_SWITCH_TURNS":     intSetter("ROUTING_SWITCH_TURNS", func(c *Config) *int { return &c.RoutingSwitchTurns }),
 	"MAX_ACCOUNT_SWITCHES":     setMaxAccountSwitches,
 	"INIT_TIMEOUT":             durationSetter("INIT_TIMEOUT", func(c *Config) *time.Duration { return &c.InitTimeout }),
 	"REQUEST_TIMEOUT":          durationSetter("REQUEST_TIMEOUT", func(c *Config) *time.Duration { return &c.RequestTimeout }),
@@ -401,8 +406,14 @@ var configChecks = []configCheck{
 		return nil
 	}},
 	{[]string{"ROUTING_STRATEGY"}, func(c Config) error {
-		if c.RoutingStrategy != "round-robin" && c.RoutingStrategy != "fill-first" {
-			return fmt.Errorf("ROUTING_STRATEGY 必须是 round-robin 或 fill-first")
+		if c.RoutingStrategy != "round-robin" && c.RoutingStrategy != "fill-first" && c.RoutingStrategy != "switch-after" {
+			return fmt.Errorf("ROUTING_STRATEGY 必须是 round-robin、fill-first 或 switch-after")
+		}
+		return nil
+	}},
+	{[]string{"ROUTING_SWITCH_TURNS"}, func(c Config) error {
+		if c.RoutingSwitchTurns <= 0 {
+			return fmt.Errorf("ROUTING_SWITCH_TURNS 必须是正整数")
 		}
 		return nil
 	}},
@@ -628,6 +639,7 @@ func (c Config) envValues() map[string]string {
 		"WARM_STARTUP_CONCURRENCY": strconv.Itoa(c.WarmStartupConcurrency),
 		"PER_ACCOUNT_CONCURRENCY":  strconv.Itoa(c.PerAccountConcurrency),
 		"ROUTING_STRATEGY":         c.RoutingStrategy,
+		"ROUTING_SWITCH_TURNS":     strconv.Itoa(c.RoutingSwitchTurns),
 		"ACCOUNT_ORDER":            c.AccountOrder,
 		"MAX_ACCOUNT_SWITCHES":     strconv.Itoa(c.MaxAccountSwitches),
 		"UPSTREAM_CHANNELS":        strings.Join(c.UpstreamChannels, ","),

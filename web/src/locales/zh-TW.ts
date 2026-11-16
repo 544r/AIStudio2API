@@ -430,12 +430,17 @@ export const messages: Record<TranslationKey, string> = {
   'settings.routingStrategy': '帳號選擇策略',
   'settings.routingRoundRobin': '輪流分配',
   'settings.accountOrder': '帳號順序',
-  'settings.accountOrderHelp': '優先使用同一帳號時依序使用這些帳號，滿載、冷卻或無法使用時換下一個',
+  'settings.accountOrderHelp':
+    '優先使用同一帳號或每 N 則換號時，依序使用這些帳號，滿載、冷卻或無法使用時換下一個',
   'settings.accountOrderUp': '上移 {account}',
   'settings.accountOrderDown': '下移 {account}',
   'settings.routingFillFirst': '優先使用同一帳號',
+  'settings.routingSwitchAfter': '每 N 則換號',
   'settings.routingHelp':
-    '輪流分配依序使用各帳號；優先使用同一帳號會持續用它，滿載或無法使用時切換',
+    '輪流分配依序使用各帳號；優先使用同一帳號會持續用它，滿載或無法使用時切換；每 N 則換號會在同一帳號成功生成 N 則後換下一個',
+  'settings.routingSwitchTurns': '換號間隔（則）',
+  'settings.routingSwitchTurnsHelp':
+    '同一模型成功生成 N 則後換到帳號順序中的下一個帳號，再 N 則再換，循環往復；失敗重試不計數',
   'settings.waaBackend': 'WAA 後端',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',

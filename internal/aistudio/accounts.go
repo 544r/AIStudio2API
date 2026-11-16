@@ -488,14 +488,19 @@ type AccountPool struct {
 	resources             map[string]string
 	perAccountConcurrency int
 	routingStrategy       string
-	lastPicked            map[string]string
-	lastPickedChannel     map[string]Channel
-	channels              []Channel
-	modelChannels         map[string]Channel
-	apiKeyAccounts        map[string][]string
-	modelAccounts         map[string][]string
-	accountOrder          map[string]int
-	changed               chan struct{}
+	// routingSwitchTurns 是 switch-after 策略下同一模型成功生成多少条后换下一个账户
+	routingSwitchTurns int
+	// routingTurns 与 routingTurnAccount 记录各模型在当前账户上已成功生成的条数与账户
+	routingTurns       map[string]int
+	routingTurnAccount map[string]string
+	lastPicked         map[string]string
+	lastPickedChannel  map[string]Channel
+	channels           []Channel
+	modelChannels      map[string]Channel
+	apiKeyAccounts     map[string][]string
+	modelAccounts      map[string][]string
+	accountOrder       map[string]int
+	changed            chan struct{}
 	// sessionCheck 以官网页面的方式打开 AI Studio 检查账户会话，为空时认证失败直接标记需要重新登录
 	sessionCheck func(context.Context, *Account) error
 	// sessions 合并同一账户并发的会话检查
@@ -953,7 +958,9 @@ func NewAccountPool(accounts []*Account, perAccountConcurrency int) *AccountPool
 	p := &AccountPool{
 		accounts: append([]*Account(nil), accounts...), byID: make(map[string]*Account, len(accounts)),
 		resources: make(map[string]string), perAccountConcurrency: perAccountConcurrency, changed: make(chan struct{}),
-		routingStrategy: "round-robin", lastPicked: make(map[string]string), lastPickedChannel: make(map[string]Channel),
+		routingStrategy: "round-robin", routingSwitchTurns: 10,
+		routingTurns: make(map[string]int), routingTurnAccount: make(map[string]string),
+		lastPicked: make(map[string]string), lastPickedChannel: make(map[string]Channel),
 	}
 	for _, account := range p.accounts {
 		if account.runtime.Cooldowns == nil {
@@ -3067,6 +3074,22 @@ func (p *AccountPool) selectionIndicesLocked(selection AccountSelection) ([]int,
 		start := sort.Search(len(indices), func(index int) bool { return p.accounts[indices[index]].ID > last })
 		return append(indices[start:], indices[:start]...), nil
 	}
+	if p.routingStrategy == "switch-after" {
+		sort.SliceStable(indices, func(left, right int) bool {
+			return p.accountRankLocked(p.accounts[indices[left]].ID) < p.accountRankLocked(p.accounts[indices[right]].ID)
+		})
+		key := selectionAccessScope(selection)
+		current := p.routingTurnAccount[key]
+		position := slices.IndexFunc(indices, func(index int) bool { return p.accounts[index].ID == current })
+		if position < 0 {
+			return indices, nil
+		}
+		if p.routingTurns[key] < p.routingSwitchTurns {
+			return append(indices[position:], indices[:position]...), nil
+		}
+		start := (position + 1) % len(indices)
+		return append(indices[start:], indices[:start]...), nil
+	}
 	sort.SliceStable(indices, func(left, right int) bool {
 		return p.accountRankLocked(p.accounts[indices[left]].ID) < p.accountRankLocked(p.accounts[indices[right]].ID)
 	})
@@ -3081,11 +3104,44 @@ func (p *AccountPool) accountRankLocked(accountID string) int {
 	return math.MaxInt
 }
 
-// SetRoutingStrategy 设置账户轮询或优先填满策略
+// SetRoutingStrategy 设置账户轮询、优先填满或每 N 条换号策略，换策略时重置换号计数
 func (p *AccountPool) SetRoutingStrategy(strategy string) {
 	p.mu.Lock()
-	p.routingStrategy = strategy
+	if p.routingStrategy != strategy {
+		p.routingStrategy = strategy
+		p.routingTurns = make(map[string]int)
+		p.routingTurnAccount = make(map[string]string)
+	}
 	p.mu.Unlock()
+}
+
+// SetRoutingSwitchTurns 设置 switch-after 策略下同一模型成功生成多少条后换号
+func (p *AccountPool) SetRoutingSwitchTurns(turns int) {
+	if turns <= 0 {
+		return
+	}
+	p.mu.Lock()
+	p.routingSwitchTurns = turns
+	p.mu.Unlock()
+}
+
+// RecordRoutingTurn 记下模型在当前账户上的一次成功生成，达到换号间隔后下一次选择换到下一个账户
+func (p *AccountPool) RecordRoutingTurn(accountID, modelID string) {
+	key := strings.TrimPrefix(strings.TrimSpace(modelID), "models/")
+	if accountID == "" || key == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.routingStrategy != "switch-after" {
+		return
+	}
+	if p.routingTurnAccount[key] != accountID {
+		p.routingTurnAccount[key] = accountID
+		p.routingTurns[key] = 1
+		return
+	}
+	p.routingTurns[key]++
 }
 
 // SetSessionCheck 设置认证失败后确认账户会话是否失效的检查

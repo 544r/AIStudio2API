@@ -449,12 +449,16 @@ export const messages: Record<TranslationKey, string> = {
   'settings.routingRoundRobin': 'ラウンドロビン',
   'settings.accountOrder': 'アカウントの順序',
   'settings.accountOrderHelp':
-    '同じアカウントを優先する場合、この順序で使用し、上限到達・クールダウン中・利用不可のときは次のアカウントに切り替えます',
+    '同じアカウントを優先する場合と N 回ごとに切り替える場合、この順序で使用し、上限到達・クールダウン中・利用不可のときは次のアカウントに切り替えます',
   'settings.accountOrderUp': '{account} を上へ移動',
   'settings.accountOrderDown': '{account} を下へ移動',
   'settings.routingFillFirst': '同じアカウントを優先',
+  'settings.routingSwitchAfter': 'N 回ごとに切り替え',
   'settings.routingHelp':
-    'ラウンドロビンは順番にアカウントを使い、同じアカウントを優先すると上限到達か利用不可まで同じアカウントを使います',
+    'ラウンドロビンは順番にアカウントを使い、同じアカウントを優先すると上限到達か利用不可まで同じアカウントを使います。N 回ごとに切り替えは、同じアカウントで N 回成功するまで使ってから次に移ります。',
+  'settings.routingSwitchTurns': '切り替え間隔（回）',
+  'settings.routingSwitchTurnsHelp':
+    '同じモデルで N 回の生成に成功すると、アカウント順序の次のアカウントに切り替え、以降も N 回ごとに繰り返します。失敗して再試行した回数は数えません。',
   'settings.waaBackend': 'WAA バックエンド',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',

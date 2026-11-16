@@ -425,11 +425,17 @@ export const messages = {
   'settings.routingStrategy': '账户选择策略',
   'settings.routingRoundRobin': '轮询',
   'settings.accountOrder': '账户顺序',
-  'settings.accountOrderHelp': '账户粘性优先时依次使用这些账户，满载、冷却或不可用时换下一个',
+  'settings.accountOrderHelp':
+    '账户粘性优先或每 N 条换号时依次使用这些账户，满载、冷却或不可用时换下一个',
   'settings.accountOrderUp': '上移 {account}',
   'settings.accountOrderDown': '下移 {account}',
   'settings.routingFillFirst': '账户粘性优先',
-  'settings.routingHelp': '轮询依次使用各账户；粘性优先持续用同一账户，满载或不可用时切换',
+  'settings.routingSwitchAfter': '每 N 条换号',
+  'settings.routingHelp':
+    '轮询依次使用各账户；粘性优先持续用同一账户，满载或不可用时切换；每 N 条换号在同一账户上成功生成 N 条后换下一个',
+  'settings.routingSwitchTurns': '换号间隔（条）',
+  'settings.routingSwitchTurnsHelp':
+    '同一模型成功生成 N 条后换到账户顺序中的下一个账户，再 N 条再换，循环往复；失败重试不计数',
   'settings.waaBackend': 'WAA 后端',
   'settings.waaBackendCamoufox': 'Camoufox',
   'settings.waaBackendSpiderMonkey': 'SpiderMonkey',
